@@ -58,6 +58,8 @@ export const VoiceMemorialStudio: React.FC<{ onSaved?: () => void }> = ({ onSave
   const [neuralAudioBlob, setNeuralAudioBlob] = useState<Blob | null>(null);
   const [neuralAudioUrl, setNeuralAudioUrl] = useState<string | null>(null);
   const [activeModelName, setActiveModelName] = useState<string | null>(null);
+  const [clonedVoiceId, setClonedVoiceId] = useState<string | null>(null);
+  const [isVoiceCloned, setIsVoiceCloned] = useState(false);
 
   // Playback State
   const [isPlaying, setIsPlaying] = useState(false);
@@ -110,6 +112,7 @@ export const VoiceMemorialStudio: React.FC<{ onSaved?: () => void }> = ({ onSave
         const file = new File([blob], `live_recording_${Date.now()}.${ext}`, { type: mime });
 
         setAudioFile(file);
+        setClonedVoiceId(null);
         const url = URL.createObjectURL(blob);
         setAudioPreviewUrl(url);
 
@@ -141,6 +144,7 @@ export const VoiceMemorialStudio: React.FC<{ onSaved?: () => void }> = ({ onSave
     const file = e.target.files?.[0];
     if (file) {
       setAudioFile(file);
+      setClonedVoiceId(null);
       const url = URL.createObjectURL(file);
       setAudioPreviewUrl(url);
     }
@@ -159,6 +163,8 @@ export const VoiceMemorialStudio: React.FC<{ onSaved?: () => void }> = ({ onSave
 
   const clearAudio = () => {
     setAudioFile(null);
+    setClonedVoiceId(null);
+    setIsVoiceCloned(false);
     setAudioPreviewUrl(null);
   };
 
@@ -179,43 +185,45 @@ export const VoiceMemorialStudio: React.FC<{ onSaved?: () => void }> = ({ onSave
     setNeuralAudioBlob(null);
 
     try {
+      const name = personName.trim() || 'Our Beloved Elder';
+      const rel = relationship.trim() || 'Family Elder';
+
       let monologue = '';
-      let title = `Memories of ${personName || 'Family'}`;
+      let title = '';
       let pullQuote = '';
-      let theme: Theme = 'Family';
       let phoneticSpeech = '';
+      let theme: Theme = 'Family';
 
       // Call Gemini 3.5 Flash / OpenRouter directly
       try {
-        const result = await directGenerateMemorialNarrative(
-          personName,
-          relationship,
+        const response = await directGenerateMemorialNarrative(
+          name,
+          rel,
           memoriesText,
           language,
+          'Comforting & Reflective',
         );
 
-        monologue = result.monologue || '';
-        phoneticSpeech = result.phoneticSpeech || '';
-        title = result.title || title;
-        pullQuote = result.pullQuote || '';
-        theme = result.theme || 'Family';
-      } catch (cloudErr) {
-        console.warn('[VoiceMemorial] Cloud generator note, using local storyteller:', cloudErr);
-        const name = personName.trim() || (language === 'hi' ? 'हमारे प्रियजन' : language === 'kn' ? 'ನಮ್ಮ ಪ್ರೀತಿಪಾತ್ರರು' : language === 'ta' ? 'நம் அன்பிற்குரியவர்' : 'Our Beloved');
-        const rel = relationship.trim() || (language === 'hi' ? 'परिवार' : language === 'kn' ? 'ಕುಟುಂಬ' : language === 'ta' ? 'குடும்பம்' : 'Family');
+        monologue = response.monologue;
+        title = response.title;
+        pullQuote = response.pullQuote;
+        phoneticSpeech = response.phoneticSpeech || '';
+        theme = (response.theme as Theme) || 'Family';
+      } catch (geminiErr: any) {
+        console.warn('[VoiceMemorial] Cloud generator note, using local storyteller:', geminiErr);
 
         if (language === 'hi') {
-          title = `${name} (${rel}) के संस्मरण`;
-          monologue = `मैं हमेशा याद रखता हूँ कि कैसे ${name} ने हमें हर परिस्थिति में एक साथ रहना सिखाया। ${memoriesText.trim()}। उनकी बातें और उनका स्नेह हमारे दिल में हमेशा जीवित रहेगा।`;
-          pullQuote = memoriesText.slice(0, 100) + '...';
+          title = `${name} की अनमोल यादें`;
+          monologue = `${name} के साथ बिताया हर पल हमारे परिवार के लिए एक धरोहर है। ${memoriesText.trim()}। उनकी सीख और प्यार सदैव हमारे दिलों में रहेगा।`;
+          pullQuote = memoriesText.slice(0, 80) + '...';
         } else if (language === 'kn') {
-          title = `${name} (${rel}) ಅವರ ನೆನಪುಗಳು`;
-          monologue = `${name} ಅವರ ಜೊತೆ ಕಳೆದ ಪ್ರತಿಯೊಂದು ಕ್ಷಣವೂ ಒಂದು ಸುಂದರ ನೆನಪು. ${memoriesText.trim()}. ಅವರ ಪ್ರೀತಿ ಮತ್ತು ಮಾರ್ಗದರ್ಶನ ನಮ್ಮ ಕುಟುಂಬದೊಂದಿಗೆ ಸದಾ ಇರುತ್ತದೆ.`;
-          pullQuote = memoriesText.slice(0, 100) + '...';
+          title = `${name} ಅವರ ಅಮೂಲ್ಯ ನೆನಪುಗಳು`;
+          monologue = `${name} ಅವರೊಂದಿಗಿನ ಪ್ರತಿಯೊಂದು ಕ್ಷಣವೂ ನಮ್ಮ ಕುಟುಂಬಕ್ಕೆ ಅಚ್ಚಳಿಯದ ನೆನಪು. ${memoriesText.trim()}. ಅವರ ಪ್ರೀತಿ, ಆಶೀರ್ವಾದ ಮತ್ತು ಜೀವನದ ಪಾಠಗಳು ನಮ್ಮಲ್ಲಿ ಎಂದಿಗೂ ಜೀವಂತವಾಗಿರುತ್ತವೆ.`;
+          pullQuote = memoriesText.slice(0, 80) + '...';
         } else if (language === 'ta') {
-          title = `${name} (${rel}) அவர்களின் நினைவுகள்`;
-          monologue = `${name} அவர்கள் நமக்கு கற்றுக்கொடுத்த பாடம் என்றும் மறையாது. ${memoriesText.trim()}. அவர்களின் அன்பு என்றும் நம்முடன் இருக்கும்.`;
-          pullQuote = memoriesText.slice(0, 100) + '...';
+          title = `${name} அவர்களின் பொக்கிஷ நினைவுகள்`;
+          monologue = `${name} அவர்களுடன் வாழ்ந்த நினைவுகள் எங்கள் குடும்பத்தின் பெரும் செல்வம். ${memoriesText.trim()}। அவர்களின் வழிகாட்டுதலும் அன்பும் என்றும் நம்முடன் இருக்கும்.`;
+          pullQuote = memoriesText.slice(0, 80) + '...';
         } else {
           title = `Reflections & Memories of ${name}`;
           monologue = `Looking back on everything ${name} shared with us as a beloved ${rel.toLowerCase()}, these moments define who we are today. ${memoriesText.trim()}. Their wisdom, warmth, and laughter will echo in our family for generations to come.`;
@@ -241,7 +249,7 @@ export const VoiceMemorialStudio: React.FC<{ onSaved?: () => void }> = ({ onSave
   };
 
   /* ─── 3. Synthesize Neural Voice (ElevenLabs Instant Voice Cloning) ─── */
-  const synthesizeNeuralVoice = async (text: string, voice = voicePersona, phoneticText?: string) => {
+  const synthesizeNeuralVoice = async (text: string, voice = voicePersona, targetLang = language) => {
     setIsSynthesizingVoice(true);
     try {
       const result = await directElevenLabsVoiceClone(
@@ -249,12 +257,17 @@ export const VoiceMemorialStudio: React.FC<{ onSaved?: () => void }> = ({ onSave
         voice,
         audioFile,
         personName.trim() || 'Family Elder',
-        language,
+        targetLang,
+        clonedVoiceId || undefined,
       );
 
       setNeuralAudioBlob(result.blob);
       setNeuralAudioUrl(result.url);
       setActiveModelName(result.model);
+      if (result.voiceId) {
+        setClonedVoiceId(result.voiceId);
+      }
+      setIsVoiceCloned(result.isCustomCloned);
       return;
     } catch (hfErr) {
       console.warn('[Voice synthesis offline note]:', hfErr);
@@ -668,15 +681,53 @@ export const VoiceMemorialStudio: React.FC<{ onSaved?: () => void }> = ({ onSave
                   <h3 className="font-serif font-bold text-base text-[#2C241E] leading-tight">
                     {generatedTitle}
                   </h3>
-                  <span className="text-[10px] text-[#7A6A5C]">
-                    {langLabel} • {activeModelName || 'ElevenLabs Multilingual v2'}
-                  </span>
+                  <div className="flex items-center gap-1.5 mt-0.5">
+                    {isVoiceCloned ? (
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300 shadow-xs">
+                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-600 animate-pulse" />
+                        🎙️ Cloned Voice ({langLabel})
+                      </span>
+                    ) : (
+                      <span className="text-[10px] text-[#7A6A5C]">
+                        {langLabel} • {activeModelName || 'ElevenLabs Multilingual v2'}
+                      </span>
+                    )}
+                  </div>
                 </div>
               </div>
 
               <span className="text-[10px] uppercase font-bold text-[#8B4513] bg-[#EFE6DB] px-2.5 py-1 rounded-full border border-[#DECFC0]">
                 {generatedTheme}
               </span>
+            </div>
+
+            {/* Quick Language Switcher in Cloned Voice */}
+            <div className="flex items-center justify-between gap-2 p-2 bg-[#FAF7F2] rounded-xl border border-[#E6DDD2]">
+              <span className="text-[10px] font-bold text-[#7A6A5C] shrink-0">
+                Speak in Cloned Voice:
+              </span>
+              <div className="flex items-center gap-1 overflow-x-auto">
+                {SUPPORTED_LANGUAGES.map((l) => (
+                  <button
+                    key={l.code}
+                    type="button"
+                    disabled={isSynthesizingVoice}
+                    onClick={async () => {
+                      setLanguage(l.code);
+                      if (generatedMonologue) {
+                        await synthesizeNeuralVoice(generatedMonologue, voicePersona, l.code);
+                      }
+                    }}
+                    className={`px-2 py-0.5 rounded-md text-[10px] font-bold transition-all cursor-pointer ${
+                      language === l.code
+                        ? 'bg-[#8B4513] text-white shadow-xs'
+                        : 'bg-white text-[#5C4D40] hover:bg-[#EFE6DB] border border-[#DECFC0]'
+                    }`}
+                  >
+                    {l.nativeName}
+                  </button>
+                ))}
+              </div>
             </div>
 
             {/* Karaoke Monologue Stream */}

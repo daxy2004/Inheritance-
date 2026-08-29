@@ -241,24 +241,51 @@ export async function directElevenLabsVoiceClone(
   audioFile?: File | null,
   personName = 'Family Elder',
   language: Language = 'en',
-): Promise<{ blob: Blob; url: string; model: string }> {
+  existingVoiceId?: string,
+): Promise<{ blob: Blob; url: string; model: string; voiceId: string; isCustomCloned: boolean }> {
   if (!ELEVENLABS_KEY) {
     throw new Error('ElevenLabs API Key not configured');
   }
 
-  let targetVoiceId = ELEVENLABS_VOICE_MAP[voiceName] || ELEVENLABS_VOICE_MAP.Charon;
-  let isCustomCloned = false;
+  let targetVoiceId = existingVoiceId || ELEVENLABS_VOICE_MAP[voiceName] || ELEVENLABS_VOICE_MAP.Charon;
+  let isCustomCloned = Boolean(existingVoiceId);
 
-  // 1. If user uploaded or recorded a voice sample, create an Instant Voice Clone on ElevenLabs!
-  if (audioFile) {
+  // Helper to ensure an open custom voice slot on ElevenLabs
+  const ensureVoiceSlotAvailable = async () => {
     try {
-      const formData = new FormData();
-      formData.append('name', `${personName} (${Date.now().toString().slice(-4)})`);
-      formData.append('description', `Instant Multilingual Voice Clone (${language.toUpperCase()}) for Inheritance Family Archive`);
-      formData.append('labels', JSON.stringify({ language, type: 'family-archive' }));
-      formData.append('files', audioFile, audioFile.name || 'voice-sample.webm');
+      const vRes = await fetch('https://api.elevenlabs.io/v1/voices', {
+        headers: { 'xi-api-key': ELEVENLABS_KEY },
+      });
+      if (!vRes.ok) return;
+      const vData = await vRes.json();
+      const cloned = (vData.voices || []).filter((v: any) => v.category === 'cloned');
+      if (cloned.length >= 8) {
+        // Sort ascending by created date to remove the oldest
+        cloned.sort((a: any, b: any) => (a.created_at_unix || 0) - (b.created_at_unix || 0));
+        const oldest = cloned[0];
+        console.log(`[ElevenLabs] Freeing custom voice slot by removing oldest clone: ${oldest.name} (${oldest.voice_id})`);
+        await fetch(`https://api.elevenlabs.io/v1/voices/${oldest.voice_id}`, {
+          method: 'DELETE',
+          headers: { 'xi-api-key': ELEVENLABS_KEY },
+        });
+      }
+    } catch (err) {
+      console.warn('[ElevenLabs] Slot cleanup notice:', err);
+    }
+  };
 
-      const cloneRes = await fetch('https://api.elevenlabs.io/v1/voices/add', {
+  // 1. If user provided a voice sample and we don't already have a cloned voiceId for this session, create the clone!
+  if (audioFile && !existingVoiceId) {
+    try {
+      await ensureVoiceSlotAvailable();
+
+      const formData = new FormData();
+      formData.append('name', `${personName.trim()} (${Date.now().toString().slice(-4)})`);
+      formData.append('description', `Instant Multilingual Voice Clone for ${personName} (${language.toUpperCase()})`);
+      formData.append('labels', JSON.stringify({ language, type: 'family-archive' }));
+      formData.append('files', audioFile, audioFile.name || 'voice-sample.wav');
+
+      let cloneRes = await fetch('https://api.elevenlabs.io/v1/voices/add', {
         method: 'POST',
         headers: {
           'xi-api-key': ELEVENLABS_KEY,
@@ -266,20 +293,35 @@ export async function directElevenLabsVoiceClone(
         body: formData,
       });
 
+      if (!cloneRes.ok && cloneRes.status === 400) {
+        // If still blocked by voice limit, force free a slot and retry once
+        await ensureVoiceSlotAvailable();
+        cloneRes = await fetch('https://api.elevenlabs.io/v1/voices/add', {
+          method: 'POST',
+          headers: {
+            'xi-api-key': ELEVENLABS_KEY,
+          },
+          body: formData,
+        });
+      }
+
       if (cloneRes.ok) {
         const cloneData = await cloneRes.json();
         if (cloneData.voice_id) {
           targetVoiceId = cloneData.voice_id;
           isCustomCloned = true;
-          console.log(`[ElevenLabs] Instant Voice Clone created for ${language}: ${targetVoiceId}`);
+          console.log(`[ElevenLabs] Successfully created Instant Voice Clone for ${personName}: ${targetVoiceId}`);
         }
+      } else {
+        const errBody = await cloneRes.text();
+        console.warn('[ElevenLabs Voice Add Error Response]', errBody);
       }
     } catch (e) {
-      console.warn('[ElevenLabs Clone Add Note]', e);
+      console.warn('[ElevenLabs Clone Add Exception]', e);
     }
   }
 
-  // 2. Synthesize audio with ElevenLabs Multilingual v2 (Native automatic script support for Kannada, Hindi, Tamil, English)
+  // 2. Synthesize audio with ElevenLabs Multilingual v2 (Indic script autodetection for Kannada, Hindi, Tamil, English)
   const ttsUrl = `https://api.elevenlabs.io/v1/text-to-speech/${targetVoiceId}?output_format=mp3_44100_128`;
   const ttsRes = await fetch(ttsUrl, {
     method: 'POST',
@@ -291,8 +333,8 @@ export async function directElevenLabsVoiceClone(
       text,
       model_id: 'eleven_multilingual_v2',
       voice_settings: {
-        stability: 0.50,
-        similarity_boost: 0.85,
+        stability: 0.45,
+        similarity_boost: 0.90,
         style: 0.35,
         use_speaker_boost: true,
       },
@@ -312,7 +354,9 @@ export async function directElevenLabsVoiceClone(
   return {
     blob: audioBlob,
     url: audioUrl,
-    model: isCustomCloned ? `ElevenLabs Instant Voice Clone (${langLabel})` : `ElevenLabs Multilingual v2 (${langLabel})`,
+    model: isCustomCloned ? `Instant Voice Clone (${langLabel})` : `ElevenLabs Multilingual v2 (${langLabel})`,
+    voiceId: targetVoiceId,
+    isCustomCloned,
   };
 }
 
