@@ -1,0 +1,10 @@
+{
+  "name": "Inheritance",
+  "description": "Preserve elderly relatives' oral histories with gentle voice prompts, structured theme archiving, and grounded memoir Q&A.",
+  "requestFramePermissions": [
+    "microphone"
+  ],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

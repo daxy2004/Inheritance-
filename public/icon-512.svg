@@ -1,0 +1,42 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <linearGradient id="terracottaGrad512" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#A0522D" />
+      <stop offset="50%" stop-color="#8B4513" />
+      <stop offset="100%" stop-color="#5C2C16" />
+    </linearGradient>
+    <radialGradient id="goldGlow512" cx="50%" cy="30%" r="60%">
+      <stop offset="0%" stop-color="#F4E8D6" stop-opacity="0.3" />
+      <stop offset="100%" stop-color="#8B4513" stop-opacity="0" />
+    </radialGradient>
+    <filter id="dropShadow512" x="-10%" y="-10%" width="120%" height="120%">
+      <feDropShadow dx="0" dy="10" stdDeviation="16" flood-color="#000" flood-opacity="0.3" />
+    </filter>
+  </defs>
+
+  <!-- Background rounded squircle -->
+  <rect width="512" height="512" rx="112" fill="url(#terracottaGrad512)" />
+  <rect width="512" height="512" rx="112" fill="url(#goldGlow512)" />
+  
+  <!-- Subtle border ring -->
+  <rect x="16" y="16" width="480" height="480" rx="96" fill="none" stroke="#E6DDD2" stroke-width="4" stroke-opacity="0.35" />
+
+  <!-- Center Crest / Letter 'I' for Inheritance -->
+  <g filter="url(#dropShadow512)">
+    <text 
+      x="256" 
+      y="336" 
+      font-family="'Newsreader', 'Georgia', 'Playfair Display', serif" 
+      font-size="256" 
+      font-weight="700" 
+      font-style="italic" 
+      fill="#FAF7F2" 
+      text-anchor="middle"
+    >
+      I
+    </text>
+  </g>
+
+  <!-- Star / Sparkle heirloom accent -->
+  <path d="M256 74 L263 94 L283 101 L263 108 L256 128 L249 108 L229 101 L249 94 Z" fill="#E6BA64" />
+</svg>
