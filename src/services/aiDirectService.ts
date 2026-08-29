@@ -282,10 +282,12 @@ export async function directElevenLabsVoiceClone(
 
     await ensureVoiceSlotAvailable();
 
+    const safeLang = typeof language === 'string' && language.length <= 4 ? language : 'kn';
+    const cleanName = (personName || 'Family Elder').slice(0, 30);
     const formData = new FormData();
-    formData.append('name', `${personName.trim() || 'Family Elder'} (${Date.now().toString().slice(-4)})`);
-    formData.append('description', `Instant Multilingual Voice Clone for ${personName} (${language.toUpperCase()})`);
-    formData.append('labels', JSON.stringify({ language, type: 'family-archive' }));
+    formData.append('name', `${cleanName} (${Date.now().toString().slice(-4)})`);
+    formData.append('description', `Inheritance Voice Clone (${safeLang})`);
+    formData.append('labels', JSON.stringify({ language: safeLang, type: 'family-archive' }));
     formData.append('files', audioFile, audioFile.name || 'voice_sample.wav');
 
     let cloneRes = await fetch('https://api.elevenlabs.io/v1/voices/add', {

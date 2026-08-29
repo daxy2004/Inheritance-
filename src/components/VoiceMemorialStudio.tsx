@@ -238,7 +238,7 @@ export const VoiceMemorialStudio: React.FC<{ onSaved?: () => void }> = ({ onSave
 
       // Synthesize voice playback
       if (monologue) {
-        await synthesizeNeuralVoice(monologue, voicePersona, phoneticSpeech);
+        await synthesizeNeuralVoice(monologue, voicePersona, language);
       }
     } catch (err: any) {
       console.error('[Gemini Narrative Error]', err);
