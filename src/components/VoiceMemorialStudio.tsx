@@ -63,7 +63,7 @@ export const VoiceMemorialStudio: React.FC<{ onSaved?: () => void }> = ({ onSave
 
   // Playback State
   const [isPlaying, setIsPlaying] = useState(false);
-  const [playbackRate, setPlaybackRate] = useState<number>(0.85);
+  const [playbackRate, setPlaybackRate] = useState<number>(1.0);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(60);
   const [currentWordIndex, setCurrentWordIndex] = useState(-1);
