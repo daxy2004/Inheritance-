@@ -202,9 +202,17 @@ export const AskArchive: React.FC = () => {
                         <button
                           key={id}
                           onClick={() => setActiveMediaEntry(entry)}
-                          className="inline-flex items-center gap-1.5 text-[11px] font-bold bg-[#EFE6DB] text-[#8B4513] px-3 py-1 rounded-full hover:bg-[#DECFC0] transition-colors cursor-pointer border border-[#DECFC0]"
+                          className="inline-flex items-center gap-1.5 text-[11px] font-bold bg-[#EFE6DB] text-[#8B4513] pl-1.5 pr-3 py-1 rounded-full hover:bg-[#DECFC0] transition-colors cursor-pointer border border-[#DECFC0]"
                         >
-                          <Play className="w-3 h-3 fill-current" />
+                          {entry.memorialPhotoUrl ? (
+                            <img
+                              src={entry.memorialPhotoUrl}
+                              alt=""
+                              className="w-4 h-4 rounded-full object-cover border border-[#8B4513]"
+                            />
+                          ) : (
+                            <Play className="w-3 h-3 fill-current" />
+                          )}
                           <span className="truncate max-w-[150px]">{entry.title}</span>
                         </button>
                       );
@@ -257,18 +265,38 @@ export const AskArchive: React.FC = () => {
       {/* Media Player Modal for Grounded Stories */}
       {activeMediaEntry && (
         <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-[#FAF7F2] max-w-md w-full rounded-3xl p-6 border border-[#E6DDD2] shadow-2xl space-y-4 animate-fade-in-up">
-            <div className="flex items-center justify-between border-b border-[#E6DDD2] pb-3">
-              <h3 className="font-serif font-bold text-base text-[#2C241E] truncate">
-                {activeMediaEntry.title}
-              </h3>
+          <div className="bg-[#FAF7F2] max-w-md w-full rounded-3xl p-5 border border-[#E6DDD2] shadow-2xl space-y-3.5 animate-fade-in-up">
+            <div className="flex items-center justify-between border-b border-[#E6DDD2] pb-2.5">
+              <div className="flex items-center gap-2 min-w-0">
+                {activeMediaEntry.memorialPhotoUrl && (
+                  <img
+                    src={activeMediaEntry.memorialPhotoUrl}
+                    alt=""
+                    className="w-6 h-6 rounded-full object-cover border border-[#8B4513]"
+                  />
+                )}
+                <h3 className="font-serif font-bold text-sm text-[#2C241E] truncate">
+                  {activeMediaEntry.title}
+                </h3>
+              </div>
               <button
                 onClick={() => setActiveMediaEntry(null)}
-                className="text-[#7A6A5C] hover:text-[#2C241E] text-xs font-bold bg-[#EFE6DB] px-3 py-1 rounded-full"
+                className="text-[#7A6A5C] hover:text-[#2C241E] text-xs font-bold bg-[#EFE6DB] px-3 py-1 rounded-full shrink-0"
               >
                 Close
               </button>
             </div>
+
+            {activeMediaEntry.memorialPhotoUrl && (
+              <div className="rounded-2xl overflow-hidden max-h-48 border border-[#DECFC0] shadow-2xs">
+                <img
+                  src={activeMediaEntry.memorialPhotoUrl}
+                  alt={activeMediaEntry.title}
+                  className="w-full h-full max-h-48 object-cover"
+                />
+              </div>
+            )}
+
             <MediaPlayer entry={activeMediaEntry} showTranscript={true} />
           </div>
         </div>

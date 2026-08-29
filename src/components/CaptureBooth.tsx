@@ -1,9 +1,11 @@
 import React, { useState, useRef, useCallback, useEffect } from 'react';
-import { Mic, Video, Square, Shuffle, ChevronRight, Check, Sparkles, Edit3, Globe, Volume2, Radio } from 'lucide-react';
+import { Mic, Video, Square, Shuffle, ChevronRight, Check, Sparkles, Edit3, Globe, Volume2, Radio, Camera, Loader2, Wand2 } from 'lucide-react';
+import { Capacitor } from '@capacitor/core';
 import { useApp } from '../state/AppContext';
 import { PROMPTS_BY_LANGUAGE } from '../data/prompts';
 import { StoryEntry, Theme, THEME_EMOJI, SUPPORTED_LANGUAGES } from '../types';
 import { startLiveTranscription, tagTheme } from '../processing/onDevice';
+import { directTranscribeAudioBlob } from '../services/aiDirectService';
 import { LanguageSelector } from './LanguageSelector';
 
 type RecordingState = 'idle' | 'recording' | 'review';
@@ -42,6 +44,7 @@ export const CaptureBooth: React.FC = () => {
   const [promptIndex, setPromptIndex] = useState(0);
   const [recordingState, setRecordingState] = useState<RecordingState>('idle');
   const [recordingType, setRecordingType] = useState<RecordingType>('audio');
+  const [cameraFacing, setCameraFacing] = useState<'user' | 'environment'>('user');
   const [duration, setDuration] = useState(0);
   const [transcript, setTranscript] = useState('');
   const [detectedTheme, setDetectedTheme] = useState<Theme | null>(null);
@@ -49,6 +52,9 @@ export const CaptureBooth: React.FC = () => {
   const [mediaUrl, setMediaUrl] = useState('');
   const [saved, setSaved] = useState(false);
   const [isManualEntry, setIsManualEntry] = useState(false);
+  const [isTranscribingAI, setIsTranscribingAI] = useState(false);
+  const [transcriptionNotice, setTranscriptionNotice] = useState<string | null>(null);
+  const [mediaError, setMediaError] = useState<string | null>(null);
 
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
@@ -57,57 +63,26 @@ export const CaptureBooth: React.FC = () => {
   const streamRef = useRef<MediaStream | null>(null);
   const videoPreviewRef = useRef<HTMLVideoElement | null>(null);
 
-  // Web Audio Visualizer Refs
-  const audioContextRef = useRef<AudioContext | null>(null);
-  const analyserRef = useRef<AnalyserNode | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const animationFrameRef = useRef<number | null>(null);
+  const audioContextRef = useRef<AudioContext | null>(null);
 
-  const availablePrompts = PROMPTS_BY_LANGUAGE[language] || PROMPTS_BY_LANGUAGE.en;
-  const currentPrompt = availablePrompts[promptIndex % availablePrompts.length];
-
-  // Visualizer Animation Loop
-  const drawWaveform = useCallback(() => {
-    if (!analyserRef.current || !canvasRef.current) return;
-    const canvas = canvasRef.current;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
-
-    const bufferLength = analyserRef.current.frequencyBinCount;
-    const dataArray = new Uint8Array(bufferLength);
-    analyserRef.current.getByteFrequencyData(dataArray);
-
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-    const barWidth = (canvas.width / 32) - 2;
-    let x = 0;
-
-    for (let i = 0; i < 32; i++) {
-      const barHeight = ((dataArray[i * 2] || 0) / 255) * (canvas.height - 4);
-      const gradient = ctx.createLinearGradient(0, canvas.height, 0, 0);
-      gradient.addColorStop(0, '#8B4513');
-      gradient.addColorStop(0.6, '#D97706');
-      gradient.addColorStop(1, '#F59E0B');
-
-      ctx.fillStyle = gradient;
-      ctx.beginPath();
-      ctx.roundRect(x, canvas.height - Math.max(barHeight, 4), Math.max(barWidth, 3), Math.max(barHeight, 4), 3);
-      ctx.fill();
-
-      x += barWidth + 2;
-    }
-
-    animationFrameRef.current = requestAnimationFrame(drawWaveform);
-  }, []);
+  const availablePrompts = (PROMPTS_BY_LANGUAGE && PROMPTS_BY_LANGUAGE[language]) || PROMPTS_BY_LANGUAGE?.en || [];
+  const currentPrompt = (availablePrompts.length > 0 && availablePrompts[Math.abs(promptIndex) % availablePrompts.length]) || {
+    id: 'p-default',
+    category: 'Family' as Theme,
+    prompt: 'What is a cherished memory or story from your life that you would like to pass down?',
+    sparkTip: 'Speak from the heart about people, places, lessons, or moments that shaped you.'
+  };
 
   const handleShuffle = () => {
-    const next = Math.floor(Math.random() * availablePrompts.length);
+    const next = Math.floor(Math.random() * Math.max(availablePrompts.length, 1));
     setPromptIndex(next);
     resetState();
   };
 
   const handleNext = () => {
-    setPromptIndex((i) => (i + 1) % availablePrompts.length);
+    setPromptIndex((i) => (i + 1) % Math.max(availablePrompts.length, 1));
     resetState();
   };
 
@@ -120,10 +95,14 @@ export const CaptureBooth: React.FC = () => {
     setMediaUrl('');
     setSaved(false);
     setIsManualEntry(false);
+    setIsTranscribingAI(false);
+    setTranscriptionNotice(null);
+    setMediaError(null);
+    setCameraFacing('user');
     if (transcriptionRef.current) transcriptionRef.current.stop();
     if (timerRef.current) clearInterval(timerRef.current);
     if (animationFrameRef.current) cancelAnimationFrame(animationFrameRef.current);
-    if (audioContextRef.current && audioContextRef.current.state !== 'closed') {
+    if (audioContextRef.current) {
       audioContextRef.current.close().catch(() => {});
       audioContextRef.current = null;
     }
@@ -133,7 +112,37 @@ export const CaptureBooth: React.FC = () => {
     }
   };
 
+  useEffect(() => {
+    return () => {
+      resetState();
+    };
+  }, []);
+
+  const handleAiTranscribe = async (blobOverride?: Blob | null) => {
+    const targetBlob = blobOverride || mediaBlob;
+    if (!targetBlob || targetBlob.size === 0) return;
+
+    setIsTranscribingAI(true);
+    setTranscriptionNotice('Transcribing audio with Gemini AI...');
+    try {
+      const aiText = await directTranscribeAudioBlob(targetBlob, language);
+      if (aiText) {
+        setTranscript(aiText);
+        setDetectedTheme(tagTheme(aiText, language));
+        setTranscriptionNotice(null);
+      } else {
+        setTranscriptionNotice('AI transcription did not detect clear speech. You can type your memory below.');
+      }
+    } catch (err: any) {
+      console.warn('[AI Transcribe Error]', err);
+      setTranscriptionNotice('Could not connect to AI transcription. You can type your memory below.');
+    } finally {
+      setIsTranscribingAI(false);
+    }
+  };
+
   const startRecording = useCallback(async (type: RecordingType) => {
+    setMediaError(null);
     setRecordingType(type);
     setRecordingState('recording');
     setDuration(0);
@@ -145,35 +154,68 @@ export const CaptureBooth: React.FC = () => {
       setDuration((d) => d + 1);
     }, 1000);
 
-    // Start live transcription with selected language locale (en-IN, hi-IN, kn-IN, ta-IN)
+    // Live speech recognition
     transcriptionRef.current = startLiveTranscription(
       (interim) => setTranscript(interim),
       (final) => setTranscript(final),
-      (error) => console.warn('[OnDevice] Transcription note:', error),
+      (error) => {
+        console.warn('[OnDevice] Transcription note:', error);
+        setTranscriptionNotice(error);
+      },
       language,
     );
 
     // Start MediaRecorder & Audio Visualizer
     try {
       const constraints: MediaStreamConstraints = type === 'video'
-        ? { audio: true, video: { facingMode: 'user', width: 360, height: 640 } }
+        ? { audio: true, video: { facingMode: { ideal: cameraFacing }, width: 360, height: 640 } }
         : { audio: true };
 
       const stream = await navigator.mediaDevices.getUserMedia(constraints);
       streamRef.current = stream;
 
-      // Audio Visualizer setup
-      try {
-        const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
-        audioContextRef.current = audioCtx;
-        const source = audioCtx.createMediaStreamSource(stream);
-        const analyser = audioCtx.createAnalyser();
-        analyser.fftSize = 128;
-        source.connect(analyser);
-        analyserRef.current = analyser;
-        drawWaveform();
-      } catch (audioCtxErr) {
-        console.warn('[AudioContext Visualizer Init]:', audioCtxErr);
+      // Live waveform visualizer for audio recording
+      if (type === 'audio') {
+        try {
+          const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
+          if (AudioContextClass) {
+            const audioCtx = new AudioContextClass();
+            audioContextRef.current = audioCtx;
+            const source = audioCtx.createMediaStreamSource(stream);
+            const analyser = audioCtx.createAnalyser();
+            analyser.fftSize = 64;
+            source.connect(analyser);
+
+            const bufferLength = analyser.frequencyBinCount;
+            const dataArray = new Uint8Array(bufferLength);
+
+            const drawWave = () => {
+              if (!canvasRef.current) return;
+              const canvas = canvasRef.current;
+              const ctx = canvas.getContext('2d');
+              if (!ctx) return;
+
+              animationFrameRef.current = requestAnimationFrame(drawWave);
+              analyser.getByteFrequencyData(dataArray);
+
+              ctx.clearRect(0, 0, canvas.width, canvas.height);
+              const barWidth = (canvas.width / bufferLength) * 2.2;
+              let x = 0;
+
+              for (let i = 0; i < bufferLength; i++) {
+                const barHeight = Math.max(4, (dataArray[i] / 255) * canvas.height);
+                ctx.fillStyle = '#8B4513';
+                ctx.beginPath();
+                ctx.roundRect(x, (canvas.height - barHeight) / 2, Math.max(2, barWidth - 2), barHeight, 2);
+                ctx.fill();
+                x += barWidth;
+              }
+            };
+            drawWave();
+          }
+        } catch (visErr) {
+          console.warn('[Audio Visualizer Note]', visErr);
+        }
       }
 
       // Show video preview
@@ -200,21 +242,33 @@ export const CaptureBooth: React.FC = () => {
         setMediaUrl(url);
         stream.getTracks().forEach((t) => t.stop());
         streamRef.current = null;
+
+        // If transcript is still empty or brief, automatically run Gemini audio transcription
+        setTranscript((current) => {
+          if (!current.trim() && blob.size > 0) {
+            handleAiTranscribe(blob);
+          }
+          return current;
+        });
       };
 
       // Collect data every 1000ms for continuous streaming buffers
       recorder.start(1000);
-    } catch (err) {
+    } catch (err: any) {
       console.error('[MediaRecorder Error] Could not access media devices:', err);
+      setMediaError(err?.message || 'Microphone or camera permission was not granted. Please check your device settings.');
+      setRecordingState('idle');
+      if (timerRef.current) clearInterval(timerRef.current);
     }
-  }, [language, drawWaveform]);
+  }, [language, cameraFacing]);
 
   const stopRecording = useCallback(() => {
     if (timerRef.current) clearInterval(timerRef.current);
     if (transcriptionRef.current) transcriptionRef.current.stop();
     if (animationFrameRef.current) cancelAnimationFrame(animationFrameRef.current);
-    if (audioContextRef.current && audioContextRef.current.state !== 'closed') {
+    if (audioContextRef.current) {
       audioContextRef.current.close().catch(() => {});
+      audioContextRef.current = null;
     }
     if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
       mediaRecorderRef.current.stop();
@@ -225,12 +279,14 @@ export const CaptureBooth: React.FC = () => {
 
     setRecordingState('review');
 
-    // On-device multilingual theme tagging
     setTimeout(() => {
-      const theme = tagTheme(transcript, language);
-      setDetectedTheme(theme);
+      setTranscript((current) => {
+        const theme = tagTheme(current, language);
+        setDetectedTheme(theme);
+        return current;
+      });
     }, 200);
-  }, [transcript, language]);
+  }, [language]);
 
   const handleSave = () => {
     const cleanTranscript = transcript.trim() || `Voice memory for prompt: "${currentPrompt.prompt}"`;
@@ -319,6 +375,17 @@ export const CaptureBooth: React.FC = () => {
       {/* ─── IDLE STATE ─── */}
       {recordingState === 'idle' && !isManualEntry && (
         <div className="animate-fade-in-up">
+          {/* Permission / Device Error Banner */}
+          {mediaError && (
+            <div className="mb-4 p-3.5 bg-red-50 text-red-800 rounded-2xl border border-red-200 text-xs text-left leading-relaxed shadow-xs flex items-start gap-2 animate-fade-in-up">
+              <span className="font-bold">⚠️</span>
+              <div className="flex-1">
+                <span className="font-semibold block mb-0.5">Recording device issue</span>
+                <span>{mediaError}</span>
+              </div>
+            </div>
+          )}
+
           {/* Recording buttons */}
           <div className="flex items-center justify-center gap-5 mb-6">
             {/* Voice Record */}
@@ -343,6 +410,15 @@ export const CaptureBooth: React.FC = () => {
               <span className="text-xs font-bold tracking-wide">{t.capture.videoBtn}</span>
             </button>
           </div>
+
+          <button
+            type="button"
+            onClick={() => setCameraFacing((current) => (current === 'user' ? 'environment' : 'user'))}
+            className="text-xs font-semibold text-[#8B4513] bg-white border border-[#E6DDD2] rounded-full px-4 py-2 shadow-xs inline-flex items-center gap-2 cursor-pointer"
+          >
+            <Camera className="w-4 h-4" />
+            <span>Use {cameraFacing === 'user' ? 'Back' : 'Selfie'} Camera</span>
+          </button>
 
           <p className="text-center text-xs text-[#7A6A5C] mb-6 max-w-xs mx-auto leading-relaxed">
             {t.capture.takeYourTime}
@@ -376,6 +452,10 @@ export const CaptureBooth: React.FC = () => {
                 <div className="w-2 h-2 rounded-full bg-white animate-ping" />
                 REC {formatTimer(duration)}
               </div>
+              <div className="absolute top-3 left-3 flex items-center gap-2 bg-black/65 backdrop-blur-md text-white text-[10px] font-bold px-3 py-1 rounded-full shadow-md uppercase tracking-wider">
+                <Camera className="w-3 h-3" />
+                <span>{cameraFacing === 'user' ? 'Selfie' : 'Back'} Camera</span>
+              </div>
             </div>
           )}
 
@@ -389,7 +469,7 @@ export const CaptureBooth: React.FC = () => {
                 </div>
               </div>
 
-              {/* Real-time Web Audio Canvas Visualizer */}
+              {/* Recording level meter */}
               <div className="w-64 h-12 bg-white rounded-2xl p-1.5 border border-[#DECFC0] shadow-xs flex items-center justify-center mt-2">
                 <canvas ref={canvasRef} width="240" height="40" className="w-full h-full" />
               </div>
@@ -408,6 +488,12 @@ export const CaptureBooth: React.FC = () => {
               <p className="font-serif text-sm text-[#4A3B2F] leading-relaxed line-clamp-3 italic">
                 "{transcript}"
               </p>
+            </div>
+          )}
+
+          {transcriptionNotice && !transcript && (
+            <div className="w-full max-w-sm bg-amber-50 text-amber-900 rounded-2xl p-3.5 border border-amber-200 mb-4 shadow-sm text-xs leading-relaxed">
+              {transcriptionNotice}
             </div>
           )}
 
@@ -452,9 +538,39 @@ export const CaptureBooth: React.FC = () => {
 
             {/* Transcript */}
             <div className="mb-4">
-              <label className="block text-xs font-bold text-[#7A6A5C] mb-1.5">
-                {isManualEntry ? t.capture.manualTypePrompt : t.capture.transcriptLabel}
-              </label>
+              <div className="flex items-center justify-between gap-2 mb-1.5">
+                <label className="block text-xs font-bold text-[#7A6A5C]">
+                  {isManualEntry ? t.capture.manualTypePrompt : t.capture.transcriptLabel}
+                </label>
+                {mediaBlob && (
+                  <button
+                    type="button"
+                    onClick={() => handleAiTranscribe()}
+                    disabled={isTranscribingAI}
+                    className="text-[11px] font-semibold text-[#8B4513] hover:text-[#5C2C16] bg-[#EFE6DB] hover:bg-[#E6DDD2] px-2.5 py-1 rounded-full border border-[#DECFC0] inline-flex items-center gap-1.5 cursor-pointer disabled:opacity-50 transition-all shadow-2xs"
+                  >
+                    {isTranscribingAI ? (
+                      <>
+                        <Loader2 className="w-3 h-3 animate-spin text-[#8B4513]" />
+                        <span>Transcribing with Gemini AI...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Sparkles className="w-3 h-3 text-[#8B4513]" />
+                        <span>✨ AI Transcribe / Refine</span>
+                      </>
+                    )}
+                  </button>
+                )}
+              </div>
+
+              {transcriptionNotice && (
+                <div className="mb-2 p-2.5 bg-amber-50 text-amber-900 text-[11px] rounded-xl border border-amber-200 flex items-center gap-2">
+                  {isTranscribingAI && <Loader2 className="w-3 h-3 animate-spin shrink-0 text-amber-700" />}
+                  <span>{transcriptionNotice}</span>
+                </div>
+              )}
+
               <textarea
                 value={transcript}
                 onChange={(e) => {
@@ -462,7 +578,7 @@ export const CaptureBooth: React.FC = () => {
                   setDetectedTheme(tagTheme(e.target.value, language));
                 }}
                 rows={5}
-                placeholder={isManualEntry ? t.capture.manualTypePrompt : (mediaUrl ? 'Audio recording captured. You can edit this transcript or save directly...' : '...')}
+                placeholder={isManualEntry ? t.capture.manualTypePrompt : (mediaUrl ? 'Audio recording captured. Type your memory or tap "✨ AI Transcribe" above...' : '...')}
                 className="w-full text-base leading-relaxed text-[#2C241E] p-3.5 rounded-2xl border border-[#DECFC0] bg-[#FAF7F2] focus:outline-none focus:ring-2 focus:ring-[#8B4513] resize-y font-serif shadow-inner"
               />
             </div>

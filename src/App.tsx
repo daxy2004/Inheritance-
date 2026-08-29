@@ -10,6 +10,7 @@ import { GoogleAuthHeader } from './components/GoogleAuthHeader';
 import { GoogleSignInGate } from './components/GoogleSignInGate';
 import { InstallPwaBanner } from './components/InstallPwaBanner';
 import { OfflineIndicator } from './components/OfflineIndicator';
+import { AppLogo } from './components/AppLogo';
 import { Sparkles } from 'lucide-react';
 
 function AppContent() {
@@ -18,13 +19,13 @@ function AppContent() {
 
   // Handle OAuth hash token callback if redirected from Google OAuth
   useEffect(() => {
-    if (typeof window !== 'undefined' && window.location.hash.includes('access_token=')) {
-      const hash = window.location.hash.substring(1);
-      const params = new URLSearchParams(hash);
-      const token = params.get('access_token');
+    if (typeof window !== 'undefined') {
+      const hashParams = new URLSearchParams(window.location.hash.replace(/^#/, ''));
+      const queryParams = new URLSearchParams(window.location.search.replace(/^\?/, ''));
+      const token = hashParams.get('access_token') || queryParams.get('access_token');
       if (token && handleOAuthCallback) {
         handleOAuthCallback(token);
-        // Clear hash from URL
+        // Clear OAuth tokens from the URL
         window.history.replaceState(null, '', window.location.pathname);
       }
     }
@@ -33,8 +34,8 @@ function AppContent() {
   if (isLoading) {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center bg-[#FAF7F2] p-6 text-center safe-top">
-        <div className="w-16 h-16 rounded-full bg-[#8B4513] text-white flex items-center justify-center font-serif font-bold text-2xl shadow-xl animate-gentle-pulse mb-4">
-          I
+        <div className="animate-gentle-pulse mb-3">
+          <AppLogo size="lg" />
         </div>
         <h1 className="font-serif text-2xl font-bold text-[#2C241E] mb-2">
           Inheritance
@@ -50,7 +51,6 @@ function AppContent() {
     );
   }
 
-  // Mandatory Google Sign-In Gate
   if (!googleUser) {
     return <GoogleSignInGate />;
   }

@@ -8,11 +8,11 @@
 
 import { Theme, Language, StoryEntry, QAMessage } from '../types';
 
-export const GEMINI_KEY: string = (process.env as any)?.GEMINI_API_KEY || '';
-export const ELEVENLABS_KEY: string = (process.env as any)?.ELEVENLABS_API_KEY || '';
-export const OPENROUTER_KEY: string = (process.env as any)?.OPENROUTER_API_KEY || '';
+export const GEMINI_KEY: string = (process.env as any)?.GEMINI_API_KEY || 'AQ.Ab8RN6IsdVsmE_j3o30fPiyRDnvj5HkNQFljZrXRnwjU_iznGQ';
+export const ELEVENLABS_KEY: string = (process.env as any)?.ELEVENLABS_API_KEY || 'sk_6081c86f1f754496fb7694b54fba3ddbad43c89509d27e48';
+export const OPENROUTER_KEY: string = (process.env as any)?.OPENROUTER_API_KEY || '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';
 
-/* ─── 1. Direct Google Gemini / OpenRouter Grounded Archive Q&A ─── */
+/* ─── 1. Direct OpenRouter / Google Gemini Grounded Archive Q&A ─── */
 export async function directAskArchive(
   question: string,
   transcriptsContext: string,
@@ -41,62 +41,81 @@ Return your answer strictly in valid JSON format:
 
   const userPrompt = `Transcripts of ${speakerName}:\n${transcriptsContext || 'No transcripts provided.'}\n\nFamily Member's Question: "${question}"`;
 
-  // Try OpenRouter DeepSeek first
+  // 1. Primary: OpenRouter API (Minimax M3 / DeepSeek V4 Pro / DeepSeek Chat)
   if (OPENROUTER_KEY) {
-    try {
-      const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${OPENROUTER_KEY}`,
-          'Content-Type': 'application/json',
-          'HTTP-Referer': 'https://inheritance-archive.app',
-          'X-Title': 'Inheritance Family Archive',
-        },
-        body: JSON.stringify({
-          model: 'deepseek/deepseek-v4-pro',
-          messages: [
-            { role: 'system', content: systemPrompt },
-            { role: 'user', content: userPrompt },
-          ],
-          response_format: { type: 'json_object' },
-          temperature: 0.2,
-        }),
-      });
+    const candidateOpenRouterModels = [
+      'minimax/minimax-m3',
+      'deepseek/deepseek-v4-pro',
+      'deepseek/deepseek-chat',
+      'deepseek/deepseek-r1',
+    ];
 
-      if (res.ok) {
-        const data = await res.json();
-        const content = data.choices?.[0]?.message?.content || '';
-        try {
-          return JSON.parse(content);
-        } catch {
-          const match = content.match(/```(?:json)?\s*([\s\S]*?)```/);
-          if (match) return JSON.parse(match[1]);
+    for (const model of candidateOpenRouterModels) {
+      try {
+        const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${OPENROUTER_KEY}`,
+            'Content-Type': 'application/json',
+            'HTTP-Referer': 'https://inheritance-archive.app',
+            'X-Title': 'Inheritance Family Archive',
+          },
+          body: JSON.stringify({
+            model,
+            messages: [
+              { role: 'system', content: systemPrompt },
+              { role: 'user', content: userPrompt },
+            ],
+            response_format: { type: 'json_object' },
+            temperature: 0.2,
+          }),
+        });
+
+        if (res.ok) {
+          const data = await res.json();
+          const content = data.choices?.[0]?.message?.content || '';
+          try {
+            return JSON.parse(content);
+          } catch {
+            const match = content.match(/```(?:json)?\s*([\s\S]*?)```/);
+            if (match) return JSON.parse(match[1]);
+          }
         }
+      } catch (e) {
+        console.warn(`[OpenRouter ${model} Note]`, e);
       }
-    } catch (e) {
-      console.warn('[OpenRouter Direct Note]', e);
     }
   }
 
-  // Fallback to Google Gemini
+  // 2. Fallback: Google Gemini 3.6 / 3.5 Flash
   if (GEMINI_KEY) {
-    try {
-      const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GEMINI_KEY}`;
-      const res = await fetch(geminiUrl, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          contents: [{ parts: [{ text: `${systemPrompt}\n\n${userPrompt}` }] }],
-          generationConfig: { responseMimeType: 'application/json', temperature: 0.3 },
-        }),
-      });
-      if (res.ok) {
-        const data = await res.json();
-        const rawText = data.candidates?.[0]?.content?.parts?.[0]?.text;
-        if (rawText) return JSON.parse(rawText);
+    const candidateGeminiModels = ['gemini-3.6-flash', 'gemini-3.5-flash', 'gemini-3.7-flash'];
+    for (const model of candidateGeminiModels) {
+      try {
+        const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${GEMINI_KEY}`;
+        const res = await fetch(geminiUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            contents: [{ parts: [{ text: `${systemPrompt}\n\n${userPrompt}` }] }],
+            generationConfig: { responseMimeType: 'application/json', temperature: 0.2 },
+          }),
+        });
+        if (res.ok) {
+          const data = await res.json();
+          const rawText = data.candidates?.[0]?.content?.parts?.[0]?.text;
+          if (rawText) {
+            try {
+              return JSON.parse(rawText);
+            } catch {
+              const match = rawText.match(/```(?:json)?\s*([\s\S]*?)```/);
+              if (match) return JSON.parse(match[1]);
+            }
+          }
+        }
+      } catch (e) {
+        console.warn(`[Gemini ${model} Ask Note]`, e);
       }
-    } catch (e) {
-      console.warn('[Gemini Direct Note]', e);
     }
   }
 
@@ -136,39 +155,42 @@ Return ONLY a valid JSON object matching this schema:
 }`;
 
   if (GEMINI_KEY) {
-    try {
-      const parts: any[] = [];
-      if (audioBase64 && audioMimeType) {
-        parts.push({ inlineData: { mimeType: audioMimeType, data: audioBase64 } });
-        parts.push({ text: `${promptInstructions}\n\nListen to their audio recording to match vocal cadence. User memories:\n"${memories}"` });
-      } else {
-        parts.push({ text: `${promptInstructions}\n\nUser memories:\n"${memories}"` });
-      }
+    const candidateModels = ['gemini-3.6-flash', 'gemini-3.5-flash', 'gemini-3.7-flash'];
+    for (const model of candidateModels) {
+      try {
+        const parts: any[] = [];
+        if (audioBase64 && audioMimeType) {
+          parts.push({ inlineData: { mimeType: audioMimeType, data: audioBase64 } });
+          parts.push({ text: `${promptInstructions}\n\nListen to their audio recording to match vocal cadence. User memories:\n"${memories}"` });
+        } else {
+          parts.push({ text: `${promptInstructions}\n\nUser memories:\n"${memories}"` });
+        }
 
-      const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GEMINI_KEY}`;
-      const res = await fetch(geminiUrl, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          contents: [{ parts }],
-          generationConfig: { responseMimeType: 'application/json', temperature: 0.7 },
-        }),
-      });
+        const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${GEMINI_KEY}`;
+        const res = await fetch(geminiUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            contents: [{ parts }],
+            generationConfig: { responseMimeType: 'application/json', temperature: 0.7 },
+          }),
+        });
 
-      if (res.ok) {
-        const data = await res.json();
-        const rawText = data.candidates?.[0]?.content?.parts?.[0]?.text;
-        if (rawText) {
-          try {
-            return JSON.parse(rawText);
-          } catch {
-            const match = rawText.match(/```(?:json)?\s*([\s\S]*?)```/);
-            if (match) return JSON.parse(match[1]);
+        if (res.ok) {
+          const data = await res.json();
+          const rawText = data.candidates?.[0]?.content?.parts?.[0]?.text;
+          if (rawText) {
+            try {
+              return JSON.parse(rawText);
+            } catch {
+              const match = rawText.match(/```(?:json)?\s*([\s\S]*?)```/);
+              if (match) return JSON.parse(match[1]);
+            }
           }
         }
+      } catch (e) {
+        console.warn(`[Direct Gemini Narrative ${model} Error]`, e);
       }
-    } catch (e) {
-      console.warn('[Direct Gemini Narrative Error]', e);
     }
   }
 
@@ -218,6 +240,7 @@ export async function directElevenLabsVoiceClone(
   voiceName = 'Charon',
   audioFile?: File | null,
   personName = 'Family Elder',
+  language: Language = 'en',
 ): Promise<{ blob: Blob; url: string; model: string }> {
   if (!ELEVENLABS_KEY) {
     throw new Error('ElevenLabs API Key not configured');
@@ -226,12 +249,13 @@ export async function directElevenLabsVoiceClone(
   let targetVoiceId = ELEVENLABS_VOICE_MAP[voiceName] || ELEVENLABS_VOICE_MAP.Charon;
   let isCustomCloned = false;
 
-  // 1. If user uploaded a voice recording file, create an Instant Voice Clone on ElevenLabs!
+  // 1. If user uploaded or recorded a voice sample, create an Instant Voice Clone on ElevenLabs!
   if (audioFile) {
     try {
       const formData = new FormData();
       formData.append('name', `${personName} (${Date.now().toString().slice(-4)})`);
-      formData.append('description', 'Instant Voice Clone for Inheritance Family Archive');
+      formData.append('description', `Instant Multilingual Voice Clone (${language.toUpperCase()}) for Inheritance Family Archive`);
+      formData.append('labels', JSON.stringify({ language, type: 'family-archive' }));
       formData.append('files', audioFile, audioFile.name || 'voice-sample.webm');
 
       const cloneRes = await fetch('https://api.elevenlabs.io/v1/voices/add', {
@@ -247,7 +271,7 @@ export async function directElevenLabsVoiceClone(
         if (cloneData.voice_id) {
           targetVoiceId = cloneData.voice_id;
           isCustomCloned = true;
-          console.log(`[ElevenLabs] Instant Voice Clone created: ${targetVoiceId}`);
+          console.log(`[ElevenLabs] Instant Voice Clone created for ${language}: ${targetVoiceId}`);
         }
       }
     } catch (e) {
@@ -255,7 +279,7 @@ export async function directElevenLabsVoiceClone(
     }
   }
 
-  // 2. Synthesize audio with ElevenLabs Multilingual v2
+  // 2. Synthesize audio with ElevenLabs Multilingual v2 (Native automatic script support for Kannada, Hindi, Tamil, English)
   const ttsUrl = `https://api.elevenlabs.io/v1/text-to-speech/${targetVoiceId}?output_format=mp3_44100_128`;
   const ttsRes = await fetch(ttsUrl, {
     method: 'POST',
@@ -267,7 +291,7 @@ export async function directElevenLabsVoiceClone(
       text,
       model_id: 'eleven_multilingual_v2',
       voice_settings: {
-        stability: 0.55,
+        stability: 0.50,
         similarity_boost: 0.85,
         style: 0.35,
         use_speaker_boost: true,
@@ -283,9 +307,94 @@ export async function directElevenLabsVoiceClone(
   const audioBlob = await ttsRes.blob();
   const audioUrl = URL.createObjectURL(audioBlob);
 
+  const langLabel = language === 'hi' ? 'Hindi (हिन्दी)' : language === 'kn' ? 'Kannada (ಕನ್ನಡ)' : language === 'ta' ? 'Tamil (தமிழ்)' : 'English';
+
   return {
     blob: audioBlob,
     url: audioUrl,
-    model: isCustomCloned ? 'ElevenLabs Instant Voice Clone (Custom Model)' : 'ElevenLabs Multilingual v2',
+    model: isCustomCloned ? `ElevenLabs Instant Voice Clone (${langLabel})` : `ElevenLabs Multilingual v2 (${langLabel})`,
   };
+}
+
+/* ─── 4. Direct Gemini 3.6 / 3.5 Flash Audio Transcription ─── */
+export async function directTranscribeAudioBlob(
+  audioBlob: Blob,
+  language: Language = 'en',
+): Promise<string> {
+  if (!audioBlob || audioBlob.size === 0) return '';
+  const langName = language === 'hi' ? 'Hindi (हिन्दी)' : language === 'kn' ? 'Kannada (ಕನ್ನಡ)' : language === 'ta' ? 'Tamil (தமிழ்)' : 'English';
+
+  if (!GEMINI_KEY) {
+    console.warn('[directTranscribeAudioBlob] GEMINI_KEY not found');
+    return '';
+  }
+
+  try {
+    const base64Data = await new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        const dataUrl = reader.result as string;
+        const parts = dataUrl.split(',');
+        resolve(parts[1] || '');
+      };
+      reader.onerror = reject;
+      reader.readAsDataURL(audioBlob);
+    });
+
+    if (!base64Data) return '';
+
+    const mime = audioBlob.type || (audioBlob.type.includes('wav') ? 'audio/wav' : 'audio/webm');
+    const cleanMime = mime.split(';')[0]; // e.g. audio/webm or audio/wav or video/webm
+
+    const promptText = `You are an expert oral historian and speech-to-text transcriber. Listen carefully to this audio recording of a family member sharing a memory. Transcribe everything spoken verbatim in its authentic language (${langName}). If spoken in Hindi, Kannada, Tamil, or English, transcribe directly into that respective script. Do NOT summarize, translate, or add commentary. Return ONLY the exact transcribed speech text.`;
+
+    const candidateModels = ['gemini-3.6-flash', 'gemini-3.5-flash', 'gemini-3.7-flash'];
+
+    for (const model of candidateModels) {
+      try {
+        const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${GEMINI_KEY}`;
+        const res = await fetch(geminiUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            contents: [
+              {
+                parts: [
+                  {
+                    text: promptText,
+                  },
+                  {
+                    inlineData: {
+                      mimeType: cleanMime,
+                      data: base64Data,
+                    },
+                  },
+                ],
+              },
+            ],
+            generationConfig: {
+              temperature: 0.1,
+            },
+          }),
+        });
+
+        if (res.ok) {
+          const data = await res.json();
+          const text = data.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || '';
+          if (text) {
+            return text;
+          }
+        } else {
+          const errText = await res.text();
+          console.warn(`[Gemini ${model} transcription warning]`, res.status, errText);
+        }
+      } catch (modelErr) {
+        console.warn(`[Gemini ${model} error]`, modelErr);
+      }
+    }
+  } catch (err) {
+    console.warn('[directTranscribeAudioBlob error]', err);
+  }
+
+  return '';
 }

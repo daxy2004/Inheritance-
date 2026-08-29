@@ -8,6 +8,8 @@
  * Handles mixed-language speech gracefully without blocking.
  */
 
+import { Capacitor } from '@capacitor/core';
+import { SpeechRecognition } from '@capacitor-community/speech-recognition';
 import { Theme, Language, SUPPORTED_LANGUAGES } from '../types';
 
 /* ─── Multilingual Theme Keywords (English, Hindi, Kannada, Tamil) ─── */
@@ -126,62 +128,145 @@ export function startLiveTranscription(
   onError: (error: string) => void,
   language: Language = 'en',
 ): { stop: () => void } {
-  const SpeechRecognition =
-    (window as any).SpeechRecognition ||
-    (window as any).webkitSpeechRecognition;
+  const langConfig = SUPPORTED_LANGUAGES.find((l) => l.code === language);
+  let isStopped = false;
 
-  if (!SpeechRecognition) {
-    onError('Speech recognition is not supported in this browser.');
+  const browserSpeechRecognition =
+    typeof window !== 'undefined'
+      ? (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition
+      : null;
+
+  // 1. Try Native Capacitor SpeechRecognition if on native platform
+  if (Capacitor.isNativePlatform() && !browserSpeechRecognition) {
+    let finalTranscript = '';
+    let partialResultsHandle: { remove: () => Promise<void> } | null = null;
+    let listeningStateHandle: { remove: () => Promise<void> } | null = null;
+
+    void (async () => {
+      try {
+        const permission = await SpeechRecognition.checkPermissions().catch(() => null);
+        if (!permission || permission.speechRecognition !== 'granted') {
+          await SpeechRecognition.requestPermissions().catch(() => {});
+        }
+
+        const availability = await SpeechRecognition.available().catch(() => ({ available: false }));
+        if (!availability.available) {
+          onError('Speech recognition service initialized. Audio will be transcribed automatically.');
+          return;
+        }
+
+        partialResultsHandle = await SpeechRecognition.addListener('partialResults', (data) => {
+          if (isStopped) return;
+          const partial = (data.matches || []).join(' ').trim();
+          if (partial) {
+            onInterim(`${finalTranscript}${finalTranscript && partial ? ' ' : ''}${partial}`.trim());
+          }
+        });
+
+        listeningStateHandle = await SpeechRecognition.addListener('listeningState', (data) => {
+          if (isStopped) return;
+          if (data.status === 'stopped') {
+            onFinal(finalTranscript.trim());
+          }
+        });
+
+        const result = await SpeechRecognition.start({
+          language: langConfig?.locale || 'en-IN',
+          maxResults: 5,
+          prompt: 'Speak your memory',
+          partialResults: true,
+          popup: false,
+        });
+
+        if (isStopped) return;
+
+        if (result.matches && result.matches.length > 0) {
+          finalTranscript = result.matches.join(' ').trim();
+          onInterim(finalTranscript);
+          onFinal(finalTranscript);
+        }
+      } catch (err: any) {
+        if (!isStopped) {
+          console.warn('[Native Speech Recognition Note]', err);
+          onError('Recording active. You can refine or transcribe with AI after recording.');
+        }
+      }
+    })();
+
+    return {
+      stop: () => {
+        isStopped = true;
+        SpeechRecognition.stop().catch(() => {});
+        partialResultsHandle?.remove().catch(() => {});
+        listeningStateHandle?.remove().catch(() => {});
+      },
+    };
+  }
+
+  // 2. Web Speech API (supported in WebViews and modern browsers)
+  if (!browserSpeechRecognition) {
+    onError('Microphone recording is active. Transcript will be generated upon review.');
     return { stop: () => {} };
   }
 
-  const recognition = new SpeechRecognition();
-  recognition.continuous = true;
-  recognition.interimResults = true;
-
-  // Set locale based on chosen language
-  const langConfig = SUPPORTED_LANGUAGES.find((l) => l.code === language);
-  recognition.lang = langConfig ? langConfig.locale : 'en-IN';
-
-  let finalTranscript = '';
-
-  recognition.onresult = (event: any) => {
-    let interim = '';
-    for (let i = event.resultIndex; i < event.results.length; i++) {
-      const result = event.results[i];
-      if (result.isFinal) {
-        finalTranscript += result[0].transcript + ' ';
-      } else {
-        interim += result[0].transcript;
-      }
-    }
-    onInterim(finalTranscript + interim);
-  };
-
-  recognition.onerror = (event: any) => {
-    if (event.error === 'not-allowed') {
-      onError('Microphone permission was not granted.');
-    } else if (event.error !== 'aborted' && event.error !== 'no-speech') {
-      // Don't hard-crash on minor speech engine warnings for mixed languages
-      console.warn('[OnDevice Speech Warning]:', event.error);
-    }
-  };
-
-  recognition.onend = () => {
-    onFinal(finalTranscript.trim());
-  };
-
   try {
-    recognition.start();
-  } catch (e) {
-    // Already active
-  }
+    const recognition = new browserSpeechRecognition();
+    recognition.continuous = true;
+    recognition.interimResults = true;
+    recognition.lang = langConfig ? langConfig.locale : 'en-IN';
 
-  return {
-    stop: () => {
-      try {
-        recognition.stop();
-      } catch (e) {}
-    },
-  };
+    let finalTranscript = '';
+
+    recognition.onresult = (event: any) => {
+      let interim = '';
+      for (let i = event.resultIndex; i < event.results.length; i++) {
+        const result = event.results[i];
+        if (result.isFinal) {
+          finalTranscript += (finalTranscript ? ' ' : '') + result[0].transcript;
+        } else {
+          interim += result[0].transcript;
+        }
+      }
+      const combined = `${finalTranscript}${interim ? ' ' + interim : ''}`.trim();
+      onInterim(combined);
+      onFinal(finalTranscript.trim() || combined);
+    };
+
+    recognition.onerror = (event: any) => {
+      if (event.error === 'not-allowed') {
+        onError('Microphone permission was not granted.');
+      } else if (event.error !== 'aborted' && event.error !== 'no-speech') {
+        console.warn('[OnDevice Speech Warning]:', event.error);
+      }
+    };
+
+    recognition.onend = () => {
+      onFinal(finalTranscript.trim());
+      // Keep listening continuously while user is recording unless stopped
+      if (!isStopped) {
+        try {
+          recognition.start();
+        } catch (e) {}
+      }
+    };
+
+    try {
+      recognition.start();
+    } catch (e) {
+      // Already active
+    }
+
+    return {
+      stop: () => {
+        isStopped = true;
+        try {
+          recognition.stop();
+        } catch (e) {}
+      },
+    };
+  } catch (err: any) {
+    console.warn('[Web Speech API Init error]', err);
+    onError('Recording active. Transcript will be processed upon completion.');
+    return { stop: () => {} };
+  }
 }

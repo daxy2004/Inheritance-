@@ -6,6 +6,8 @@ import { Mic, Clock, Quote, ChevronDown, ChevronUp, Video, Volume2, PlusCircle, 
 import { GoogleDriveBackup } from './GoogleDriveBackup';
 import { LanguageSelector } from './LanguageSelector';
 
+import { AppLogo } from './AppLogo';
+
 const ALL_THEMES: (Theme | 'All')[] = ['All', 'Childhood', 'Career', 'Family', 'Values', 'Recipes', 'Advice'];
 
 interface FamilyViewProps {
@@ -46,9 +48,7 @@ export const FamilyView: React.FC<FamilyViewProps> = ({ onGoToCapture }) => {
       <div className="sticky top-0 z-40 bg-[#FAF7F2]/95 backdrop-blur-xl border-b border-[#E6DDD2] px-4 pt-[max(env(safe-area-inset-top,0px),16px)] pb-3 shadow-xs">
         <div className="flex items-center justify-between gap-2 mb-3">
           <div className="flex items-center gap-2.5">
-            <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-[#8B4513] to-[#5C2C16] text-white flex items-center justify-center font-serif font-bold text-lg shadow-sm">
-              {speakerName ? speakerName.charAt(0).toUpperCase() : 'I'}
-            </div>
+            <AppLogo size="sm" />
             <div>
               <h1 className="font-serif text-lg sm:text-xl font-bold text-[#2C241E] leading-tight">
                 {speakerName}{t.family.archiveTitle}
@@ -271,7 +271,20 @@ const EntryCard: React.FC<{
 
       {/* Expanded: media player + full transcript */}
       {isExpanded && (
-        <div className="mt-4 pt-4 border-t border-[#E8DDD2] animate-slide-up">
+        <div className="mt-4 pt-4 border-t border-[#E8DDD2] animate-slide-up space-y-3.5">
+          {entry.memorialPhotoUrl && (
+            <div className="relative rounded-2xl overflow-hidden max-h-56 bg-black/5 border border-[#DECFC0] shadow-sm flex items-center justify-center">
+              <img
+                src={entry.memorialPhotoUrl}
+                alt={entry.title}
+                className="w-full h-full max-h-56 object-cover object-center"
+              />
+              <div className="absolute bottom-2 left-2 px-2.5 py-1 rounded-full bg-black/60 backdrop-blur-xs text-white text-[10px] font-bold">
+                🕊️ {entry.speaker || 'Family Elder'} • Portrait
+              </div>
+            </div>
+          )}
+
           <MediaPlayer entry={entry} showTranscript={true} />
 
           {/* Pull quote highlight */}

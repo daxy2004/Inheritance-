@@ -249,6 +249,7 @@ export const VoiceMemorialStudio: React.FC<{ onSaved?: () => void }> = ({ onSave
         voice,
         audioFile,
         personName.trim() || 'Family Elder',
+        language,
       );
 
       setNeuralAudioBlob(result.blob);
@@ -341,6 +342,8 @@ export const VoiceMemorialStudio: React.FC<{ onSaved?: () => void }> = ({ onSave
       tags: ['tribute', 'memorial', 'voice-clone', language],
       isSample: false,
       language,
+      isMemorial: true,
+      memorialPhotoUrl: photoUrl || undefined,
     };
 
     await addEntry(newEntry);
@@ -574,19 +577,47 @@ export const VoiceMemorialStudio: React.FC<{ onSaved?: () => void }> = ({ onSave
           </div>
         </div>
 
-        {/* Step 3: Memories Input */}
+        {/* Step 3: Memories Input & Regional Language Picker */}
         <div className="card p-4 space-y-3 border border-[#E6DDD2]">
-          <div className="flex items-center justify-between">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
             <span className="text-[11px] uppercase tracking-wider font-bold text-[#8B4513]">
-              Step 3 • Type Memories & Stories ({langLabel})
+              Step 3 • Spoken Memories & Stories
             </span>
+            <div className="flex items-center gap-1 bg-[#FAF7F2] p-1 rounded-xl border border-[#DECFC0]">
+              {SUPPORTED_LANGUAGES.map((l) => (
+                <button
+                  key={l.code}
+                  type="button"
+                  onClick={() => setLanguage(l.code)}
+                  className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                    language === l.code
+                      ? 'bg-[#8B4513] text-white shadow-xs'
+                      : 'text-[#7A6A5C] hover:text-[#2C241E]'
+                  }`}
+                >
+                  {l.nativeName}
+                </button>
+              ))}
+            </div>
           </div>
+
+          <p className="text-[11px] text-[#7A6A5C]">
+            Select target language above. Gemini AI will compose the tribute monologue in <strong>{langLabel}</strong> and ElevenLabs will speak it in native audio.
+          </p>
 
           <textarea
             value={memoriesText}
             onChange={(e) => setMemoriesText(e.target.value)}
             rows={4}
-            placeholder={`Describe what you loved most about ${personName || 'them'} — funny sayings, childhood stories, lessons, advice, recipes, or favorite memories...`}
+            placeholder={
+              language === 'kn'
+                ? `ಅವರ ಬಗ್ಗೆ ನಿಮ್ಮ ನೆನಪುಗಳನ್ನು ಇಲ್ಲಿ ಬರೆಯಿರಿ (ಉದಾ: ಅವರ ಪ್ರೀತಿ, ಕೃಷಿ, ಊರು, ಜೀವನದ ಮೌಲ್ಯಗಳು, ಪಾಕವಿಧಾನಗಳು ಅಥವಾ ಅವರ ನೆನಪಿನ ಮಾತುಗಳು)...`
+                : language === 'hi'
+                ? `अपने प्रियजन की यादें, सीख, किस्से या बातें यहाँ लिखें (या बोलें)...`
+                : language === 'ta'
+                ? `அவர்களின் வாழ்க்கைப் பாடங்கள், கதைகள், அன்பு மற்றும் நினைவுகளை இங்கே எழுதுங்கள்...`
+                : `Describe what you loved most about ${personName || 'them'} — funny sayings, childhood stories, lessons, advice, recipes, or favorite memories...`
+            }
             className="w-full bg-[#FAF7F2] border border-[#DECFC0] rounded-2xl p-3.5 text-xs sm:text-sm text-[#2C241E] focus:outline-none focus:ring-2 focus:ring-[#8B4513] font-serif shadow-inner resize-y leading-relaxed"
           />
 

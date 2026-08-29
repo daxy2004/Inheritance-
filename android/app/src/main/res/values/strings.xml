@@ -4,4 +4,5 @@
     <string name="title_activity_main">Inheritance</string>
     <string name="package_name">com.inheritance.familyarchive</string>
     <string name="custom_url_scheme">com.inheritance.familyarchive</string>
+    <string name="server_client_id">249104411965-5sa7u1mojbjejsqnp5fkrma77hu01mkr.apps.googleusercontent.com</string>
 </resources>

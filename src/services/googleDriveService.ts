@@ -31,19 +31,19 @@ export function requestGoogleToken(clientId = DEFAULT_CLIENT_ID): Promise<string
               }
             },
           });
-          client.requestAccessToken();
+          client.requestAccessToken({ prompt: 'select_account' });
         } catch (e: any) {
-          reject(e);
+          reject(new Error(`Google sign-in could not start in this APK. Configure an Android OAuth client or allow the app origin in Google Cloud Console. Original error: ${e?.message || e}`));
         }
       } else if (attempts < 20) {
         setTimeout(() => waitForGsi(attempts + 1), 150);
       } else {
-        // Load dynamically if not present
+        // Load dynamically if not present, then fall back to a full-page OAuth redirect.
         const script = document.createElement('script');
         script.src = 'https://accounts.google.com/gsi/client';
         script.async = true;
         script.onload = () => waitForGsi(0);
-        script.onerror = () => reject(new Error('Could not load Google Identity Services'));
+        script.onerror = () => reject(new Error('Could not load Google Identity Services. For APK installs, add the app origin / Android OAuth client in Google Cloud Console.'));
         document.head.appendChild(script);
       }
     };

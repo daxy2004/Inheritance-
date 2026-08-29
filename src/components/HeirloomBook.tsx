@@ -41,27 +41,16 @@ export const HeirloomBook: React.FC = () => {
             <button
               onClick={() => generateMemoir()}
               disabled={isGeneratingMemoir}
-              className="btn-secondary text-xs !py-2 !px-3.5 !min-h-0 cursor-pointer"
+              className="btn-secondary text-xs !py-2 !px-4 !min-h-0 cursor-pointer shadow-xs"
             >
               <Sparkles className={`w-3.5 h-3.5 ${isGeneratingMemoir ? 'animate-spin' : ''}`} />
               <span>{isGeneratingMemoir ? t.memoir.curating : t.memoir.regenerate}</span>
-            </button>
-
-            <button
-              onClick={handlePrint}
-              className="btn-primary text-xs !py-2 !px-4 !min-h-0 cursor-pointer shadow-md"
-            >
-              <Printer className="w-3.5 h-3.5" />
-              <span>{t.memoir.printPdf}</span>
             </button>
           </div>
         </div>
 
         <div className="flex items-center justify-between pt-1">
           <LanguageSelector compact={true} />
-          <span className="text-[10px] uppercase tracking-wider font-bold text-[#8B4513] bg-[#EFE6DB] px-3 py-1 rounded-full border border-[#DECFC0]">
-            Heirloom Keepsake Edition
-          </span>
         </div>
       </div>
 
@@ -160,6 +149,19 @@ export const HeirloomBook: React.FC = () => {
                         {entry.approxYear}
                       </span>
                     </div>
+
+                    {entry.memorialPhotoUrl && (
+                      <div className="my-2 rounded-2xl overflow-hidden max-h-64 border-2 border-[#DECFC0] shadow-sm bg-white p-1.5">
+                        <img
+                          src={entry.memorialPhotoUrl}
+                          alt={entry.title}
+                          className="w-full h-full max-h-60 object-cover rounded-xl"
+                        />
+                        <span className="text-[10px] italic text-[#7A6A5C] block text-center mt-1 font-serif">
+                          Keepsake Portrait • {entry.speaker || 'Family Elder'}
+                        </span>
+                      </div>
+                    )}
 
                     <p className="font-serif text-sm sm:text-base leading-relaxed text-[#3B2E24] whitespace-pre-line">
                       {entry.transcript}

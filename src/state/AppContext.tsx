@@ -6,6 +6,8 @@
  */
 
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import { Capacitor } from '@capacitor/core';
+import { GoogleAuth } from '@codetrix-studio/capacitor-google-auth';
 import { StoryEntry, QAMessage, MemoirBook, Language } from '../types';
 import { INITIAL_SPEAKER_NAME } from '../data/sampleStories';
 import { tagTheme } from '../processing/onDevice';
@@ -104,6 +106,14 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     initStorage();
   }, [initStorage]);
 
+  useEffect(() => {
+    if (Capacitor.isNativePlatform()) {
+      GoogleAuth.initialize().catch((err) => {
+        console.warn('[GoogleAuth initialize]', err);
+      });
+    }
+  }, []);
+
   // Google Auth & Auto-Drive Sync State
   const [googleUser, setGoogleUser] = useState<GoogleUserInfo | null>(() => {
     try {
@@ -136,8 +146,25 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   const signInWithGoogle = useCallback(async () => {
     try {
-      const token = await requestGoogleToken();
-      const profile = await fetchGoogleProfile(token);
+      let token = '';
+      let profile = { email: '', name: '', picture: '' };
+
+      if (Capacitor.isNativePlatform()) {
+        const user = await GoogleAuth.signIn();
+        token = user.authentication?.accessToken || '';
+        if (!token) {
+          throw new Error('Google sign-in did not return an access token.');
+        }
+        profile = {
+          email: user.email || 'Google User',
+          name: user.name || user.givenName || 'User',
+          picture: user.imageUrl || '',
+        };
+      } else {
+        token = await requestGoogleToken();
+        profile = await fetchGoogleProfile(token);
+      }
+
       const folderId = await getOrCreateDriveFolder(token, `${speakerName}'s Living Family Archive`);
       const folderUrl = `https://drive.google.com/drive/folders/${folderId}`;
 
@@ -218,12 +245,33 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     }
   }, [speakerName, entries]);
 
-  const signOutGoogle = useCallback(() => {
+  const signOutGoogle = useCallback(async () => {
+    // Auto-sync all audio, video recordings, transcripts, and memoir to Google Drive before signing out
+    if (googleUser?.accessToken && googleUser?.folderId && entries.length > 0) {
+      setIsSyncingDrive(true);
+      try {
+        await syncAllEntriesToDrive(
+          googleUser.accessToken,
+          googleUser.folderId,
+          speakerName,
+          entries,
+        );
+      } catch (syncErr) {
+        console.warn('[Auto-sync before sign out warning]', syncErr);
+      } finally {
+        setIsSyncingDrive(false);
+      }
+    }
+
     setGoogleUser(null);
     try {
       localStorage.removeItem('inheritance_google_user');
+      localStorage.removeItem('inheritance_guest_mode');
     } catch {}
-  }, []);
+    if (Capacitor.isNativePlatform()) {
+      GoogleAuth.signOut().catch((err) => console.warn('[GoogleAuth signOut]', err));
+    }
+  }, [googleUser, entries, speakerName]);
 
   const addEntry = useCallback(async (entry: StoryEntry) => {
     // 1. Run multilingual on-device theme tagging

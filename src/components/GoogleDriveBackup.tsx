@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useApp } from '../state/AppContext';
 import { Cloud, Check, AlertCircle, Loader2, Download, Music, Video, FileText, ExternalLink, ShieldCheck, Key, HelpCircle } from 'lucide-react';
 import { getMediaBlobFromStorage } from '../storage/db';
+import { requestGoogleToken } from '../services/googleDriveService';
 
 interface GoogleDriveBackupProps {
   compact?: boolean;
@@ -17,8 +18,6 @@ export const GoogleDriveBackup: React.FC<GoogleDriveBackupProps> = ({ compact = 
   const [createdDriveFolderUrl, setCreatedDriveFolderUrl] = useState<string | null>(googleUser?.folderUrl || null);
 
   // Client ID / OAuth State
-  const [clientId] = useState('249104411965-5sa7u1mojbjejsqnp5fkrma77hu01mkr.apps.googleusercontent.com');
-
   /* ─── 1. Direct Media & Memoir Downloader (.wav / .webm / .html) ─── */
   const downloadAllMediaAndMemoir = async () => {
     if (entries.length === 0) {
@@ -86,7 +85,7 @@ export const GoogleDriveBackup: React.FC<GoogleDriveBackupProps> = ({ compact = 
       if (!accessToken) {
         setProgressText('Connecting with Google...');
         try {
-          accessToken = await requestGoogleDriveToken(clientId.trim());
+          accessToken = await requestGoogleToken();
         } catch (authErr: any) {
           console.warn('[Google Drive Auth]', authErr);
           setStatusMessage({
@@ -360,51 +359,6 @@ function escapeHtml(str: string): string {
     '"': '&quot;',
     "'": '&#39;',
   }[m] || m));
-}
-
-/* ─── Google OAuth Token Request ─── */
-
-function requestGoogleDriveToken(clientId: string): Promise<string> {
-  return new Promise((resolve, reject) => {
-    if (typeof window === 'undefined') {
-      reject(new Error('Window not available'));
-      return;
-    }
-
-    // Load Google Identity Services script if not already loaded
-    if (!(window as any).google?.accounts?.oauth2) {
-      const script = document.createElement('script');
-      script.src = 'https://accounts.google.com/gsi/client';
-      script.async = true;
-      script.defer = true;
-      script.onload = () => initClient();
-      script.onerror = () => reject(new Error('Could not load Google Identity Services'));
-      document.body.appendChild(script);
-    } else {
-      initClient();
-    }
-
-    function initClient() {
-      try {
-        const client = (window as any).google.accounts.oauth2.initTokenClient({
-          client_id: clientId,
-          scope: 'https://www.googleapis.com/auth/drive.file',
-          callback: (response: any) => {
-            if (response.error) {
-              reject(new Error(response.error_description || response.error));
-            } else if (response.access_token) {
-              resolve(response.access_token);
-            } else {
-              reject(new Error('No access token returned'));
-            }
-          },
-        });
-        client.requestAccessToken();
-      } catch (e) {
-        reject(e);
-      }
-    }
-  });
 }
 
 /* ─── Drive API Helpers ─── */
