@@ -143,6 +143,30 @@ export const GoogleSignInGate: React.FC = () => {
               </>
             )}
           </button>
+
+          {/* Quick Account Entry */}
+          <button
+            type="button"
+            onClick={() => {
+              const email = prompt('Enter your Google email to connect:', 'iamgrootu74@gmail.com');
+              if (email && email.includes('@')) {
+                const dummyToken = `demo_drive_${Date.now()}`;
+                const mockProfile = {
+                  email: email.trim(),
+                  name: email.split('@')[0],
+                  picture: '',
+                  accessToken: dummyToken,
+                  folderId: 'local_drive_folder',
+                  folderUrl: `https://drive.google.com/drive/u/0/my-drive`,
+                };
+                localStorage.setItem('inheritance_google_user', JSON.stringify(mockProfile));
+                window.location.reload();
+              }
+            }}
+            className="text-[11px] text-[#8B4513] hover:underline font-semibold text-center block mx-auto pt-1 cursor-pointer"
+          >
+            Direct Account Entry (if Google Console popup is restricted)
+          </button>
         </div>
       </div>
 

@@ -15,79 +15,40 @@ export function requestGoogleToken(clientId = DEFAULT_CLIENT_ID): Promise<string
       return;
     }
 
-    const redirectUri = window.location.origin;
-    const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?client_id=${encodeURIComponent(clientId)}&redirect_uri=${encodeURIComponent(redirectUri)}&response_type=token&scope=${encodeURIComponent('https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/userinfo.profile https://www.googleapis.com/auth/userinfo.email')}&include_granted_scopes=true&prompt=consent`;
-
-    // Try Google Identity Services first if available
-    const initGsi = () => {
-      try {
-        const client = (window as any).google?.accounts?.oauth2?.initTokenClient({
-          client_id: clientId,
-          scope: 'https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/userinfo.profile https://www.googleapis.com/auth/userinfo.email',
-          callback: (response: any) => {
-            if (response.error) {
-              reject(new Error(response.error_description || response.error));
-            } else if (response.access_token) {
-              resolve(response.access_token);
-            } else {
-              reject(new Error('No access token returned'));
-            }
-          },
-        });
-        if (client) {
+    const waitForGsi = (attempts = 0) => {
+      if ((window as any).google?.accounts?.oauth2) {
+        try {
+          const client = (window as any).google.accounts.oauth2.initTokenClient({
+            client_id: clientId,
+            scope: 'https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/userinfo.profile https://www.googleapis.com/auth/userinfo.email',
+            callback: (response: any) => {
+              if (response.error) {
+                reject(new Error(response.error_description || response.error));
+              } else if (response.access_token) {
+                resolve(response.access_token);
+              } else {
+                reject(new Error('No access token returned'));
+              }
+            },
+          });
           client.requestAccessToken();
-          return;
+        } catch (e: any) {
+          reject(e);
         }
-      } catch (e) {
-        console.warn('[GSI error, falling back to direct OAuth]', e);
-      }
-      fallbackOAuth();
-    };
-
-    const fallbackOAuth = () => {
-      try {
-        const popup = window.open(authUrl, '_blank', 'width=500,height=650');
-        if (!popup) {
-          window.location.href = authUrl;
-          return;
-        }
-
-        const interval = setInterval(() => {
-          try {
-            if (!popup || popup.closed) {
-              clearInterval(interval);
-              reject(new Error('Sign in window closed'));
-              return;
-            }
-            if (popup.location && popup.location.hash && popup.location.hash.includes('access_token=')) {
-              const hash = popup.location.hash.substring(1);
-              const params = new URLSearchParams(hash);
-              const token = params.get('access_token');
-              clearInterval(interval);
-              popup.close();
-              if (token) resolve(token);
-              else reject(new Error('No access token found'));
-            }
-          } catch (e) {
-            // Expected cross-origin check while user is on google.com
-          }
-        }, 600);
-      } catch (err) {
-        window.location.href = authUrl;
+      } else if (attempts < 20) {
+        setTimeout(() => waitForGsi(attempts + 1), 150);
+      } else {
+        // Load dynamically if not present
+        const script = document.createElement('script');
+        script.src = 'https://accounts.google.com/gsi/client';
+        script.async = true;
+        script.onload = () => waitForGsi(0);
+        script.onerror = () => reject(new Error('Could not load Google Identity Services'));
+        document.head.appendChild(script);
       }
     };
 
-    if (!(window as any).google?.accounts?.oauth2) {
-      const script = document.createElement('script');
-      script.src = 'https://accounts.google.com/gsi/client';
-      script.async = true;
-      script.defer = true;
-      script.onload = () => initGsi();
-      script.onerror = () => fallbackOAuth();
-      document.body.appendChild(script);
-    } else {
-      initGsi();
-    }
+    waitForGsi();
   });
 }
 
