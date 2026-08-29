@@ -205,9 +205,43 @@ export async function syncAllEntriesToDrive(
   let uploadedCount = 0;
   if (!accessToken || !folderId || entries.length === 0) return 0;
 
-  // 1. Upload/Update Formatted Memoir Book as Google Doc
+  // 1. Upload/Update Archive Index JSON to Google Drive
   try {
-    onProgress?.('Generating & syncing Memoir Book (Google Doc)...', 10);
+    onProgress?.('Syncing archive database to Google Drive...', 5);
+    const indexJson = JSON.stringify(
+      entries.map((e) => ({
+        id: e.id,
+        type: e.type,
+        title: e.title,
+        prompt: e.prompt,
+        transcript: e.transcript,
+        mediaDurationSec: e.mediaDurationSec,
+        recordedAt: e.recordedAt,
+        approxYear: e.approxYear,
+        theme: e.theme,
+        pullQuote: e.pullQuote,
+        speaker: e.speaker,
+        tags: e.tags,
+        language: e.language,
+      })),
+      null,
+      2,
+    );
+    await uploadFileToDrive(
+      accessToken,
+      folderId,
+      'archive_index.json',
+      'application/json',
+      new Blob([indexJson], { type: 'application/json' }),
+      false,
+    );
+  } catch (jsonErr) {
+    console.warn('[Archive Index Sync Note]', jsonErr);
+  }
+
+  // 2. Upload/Update Formatted Memoir Book as Google Doc
+  try {
+    onProgress?.('Generating & syncing Memoir Book (Google Doc)...', 15);
     const memoirHtml = generateMemoirHtml(speakerName, entries);
     await uploadFileToDrive(
       accessToken,
@@ -221,16 +255,16 @@ export async function syncAllEntriesToDrive(
     console.warn('[Memoir Google Doc Upload Error]', memoirErr);
   }
 
-  // 2. Upload Each Audio and Video Recording
+  // 3. Upload Each Audio and Video Recording
   for (let i = 0; i < entries.length; i++) {
     const entry = entries[i];
-    const percent = 20 + Math.floor(((i + 1) / entries.length) * 80);
-    onProgress?.(`Uploading "${entry.title}" (${i + 1}/${entries.length})...`, percent);
+    const percent = 25 + Math.floor(((i + 1) / entries.length) * 75);
+    onProgress?.(`Preserving "${entry.title}" in Drive (${i + 1}/${entries.length})...`, percent);
 
     try {
-      const blob = entry.mediaBlob || await getMediaBlobFromStorage(entry.id);
+      const blob = entry.mediaBlob || (await getMediaBlobFromStorage(entry.id));
       if (blob && blob.size > 0) {
-        const ext = entry.type === 'video' ? 'webm' : (blob.type.includes('wav') ? 'wav' : 'webm');
+        const ext = entry.type === 'video' ? 'webm' : blob.type.includes('wav') ? 'wav' : 'webm';
         const mimeType = blob.type || (entry.type === 'video' ? 'video/webm' : 'audio/wav');
         const cleanTitle = entry.title.replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 30);
         const fileName = `${entry.approxYear || 'memory'}_${cleanTitle}.${ext}`;
@@ -238,7 +272,6 @@ export async function syncAllEntriesToDrive(
         await uploadFileToDrive(accessToken, folderId, fileName, mimeType, blob);
         uploadedCount++;
       } else if (entry.transcript) {
-        // If audio blob isn't available, save transcript as document
         const cleanTitle = entry.title.replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 30);
         const fileName = `${entry.approxYear || 'memory'}_${cleanTitle}.txt`;
         const textBlob = new Blob([entry.transcript], { type: 'text/plain;charset=utf-8' });
@@ -252,6 +285,39 @@ export async function syncAllEntriesToDrive(
 
   onProgress?.('All memories safely preserved in Google Drive!', 100);
   return uploadedCount;
+}
+
+/* ─── Fetch Archive Index From Google Drive ─── */
+export async function fetchArchiveIndexFromDrive(accessToken: string, folderId: string): Promise<StoryEntry[] | null> {
+  try {
+    const q = `'${folderId}' in parents and name = 'archive_index.json' and trashed = false`;
+    const searchRes = await fetch(
+      `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(q)}&fields=files(id,name)&spaces=drive`,
+      { headers: { Authorization: `Bearer ${accessToken}` } },
+    );
+    if (!searchRes.ok) return null;
+    const data = await searchRes.json();
+    const fileId = data.files?.[0]?.id;
+    if (!fileId) return null;
+
+    const fileRes = await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`, {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    });
+    if (fileRes.ok) {
+      const items = await fileRes.json();
+      if (Array.isArray(items)) {
+        return items.map((raw: any) => ({
+          ...raw,
+          mediaBlob: null,
+          mediaUrl: '',
+          isSample: false,
+        }));
+      }
+    }
+  } catch (err) {
+    console.warn('[Fetch from Drive Note]', err);
+  }
+  return null;
 }
 
 /* ─── 6. Generate Formatted Memoir HTML ─── */

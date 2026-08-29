@@ -228,7 +228,7 @@ export async function purgeSampleEntries(): Promise<void> {
     getAllReq.onsuccess = () => {
       const all = getAllReq.result as StoredEntrySchema[];
       for (const item of all) {
-        if (item.isSample || item.id.startsWith('story-wedding') || item.id.startsWith('story-hindi') || item.id.startsWith('story-kannada') || item.id.startsWith('story-tamil') || item.id.startsWith('story-first-job') || item.id.startsWith('story-sunday') || item.id.startsWith('story-forgiveness')) {
+        if (item.isSample || item.id.startsWith('story-')) {
           entryStore.delete(item.id);
           mediaStore.delete(item.id);
         }

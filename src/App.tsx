@@ -7,12 +7,13 @@ import { AskArchive } from './components/AskArchive';
 import { HeirloomBook } from './components/HeirloomBook';
 import { VoiceMemorialStudio } from './components/VoiceMemorialStudio';
 import { GoogleAuthHeader } from './components/GoogleAuthHeader';
+import { GoogleSignInGate } from './components/GoogleSignInGate';
 import { InstallPwaBanner } from './components/InstallPwaBanner';
 import { OfflineIndicator } from './components/OfflineIndicator';
 import { Sparkles } from 'lucide-react';
 
 function AppContent() {
-  const { isLoading, entries, speakerName, handleOAuthCallback } = useApp();
+  const { isLoading, entries, speakerName, googleUser, handleOAuthCallback } = useApp();
   const [currentTab, setCurrentTab] = useState<ViewTab>('family');
 
   // Handle OAuth hash token callback if redirected from Google OAuth
@@ -39,14 +40,19 @@ function AppContent() {
           Inheritance
         </h1>
         <p className="text-xs text-[#7A6A5C] max-w-xs mb-6">
-          Initializing family living archive & on-device storage for {speakerName}...
+          Initializing family living archive & Google Drive storage...
         </p>
         <div className="flex items-center gap-2 text-xs font-semibold text-[#8B4513] bg-[#EFE6DB] px-4 py-2 rounded-full border border-[#DECFC0]">
           <Sparkles className="w-4 h-4 animate-spin" />
-          <span>Hydrating Living Archive (English, हिन्दी, ಕನ್ನಡ, தமிழ்)...</span>
+          <span>Opening Family Archive...</span>
         </div>
       </div>
     );
+  }
+
+  // Mandatory Google Sign-In Gate
+  if (!googleUser) {
+    return <GoogleSignInGate />;
   }
 
   return (

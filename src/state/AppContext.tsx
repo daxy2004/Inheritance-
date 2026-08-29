@@ -13,7 +13,7 @@ import { askArchive as cloudAskArchive, generateMemoir as cloudGenerateMemoir } 
 import { getAllStoredEntries, saveStoryToStorage, purgeSampleEntries } from '../storage/db';
 import { hydrateEntries } from '../data/mediaGenerator';
 import { TRANSLATIONS, TranslationDictionary } from '../i18n/translations';
-import { requestGoogleToken, fetchGoogleProfile, getOrCreateDriveFolder, uploadFileToDrive, syncAllEntriesToDrive } from '../services/googleDriveService';
+import { requestGoogleToken, fetchGoogleProfile, getOrCreateDriveFolder, uploadFileToDrive, syncAllEntriesToDrive, fetchArchiveIndexFromDrive } from '../services/googleDriveService';
 
 export interface GoogleUserInfo {
   email: string;
@@ -86,26 +86,15 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   const t = TRANSLATIONS[language] || TRANSLATIONS.en;
 
-  // Initialize storage on mount
+  // Initialize storage on mount (Purges sample entries, keeps real user recordings)
   const initStorage = useCallback(async () => {
     try {
+      await purgeSampleEntries();
       const stored = await getAllStoredEntries();
-      if (stored.length > 0) {
-        setEntries(stored);
-      } else {
-        // Hydrate rich multilingual stories on fresh install
-        const initial = await hydrateEntries();
-        for (const entry of initial) {
-          try {
-            await saveStoryToStorage(entry);
-          } catch {}
-        }
-        setEntries(initial);
-      }
+      setEntries(stored.filter((e) => !e.isSample && !e.id.startsWith('story-')));
     } catch (err) {
       console.warn('[AppContext] Storage initialization note:', err);
-      const fallback = await hydrateEntries();
-      setEntries(fallback);
+      setEntries([]);
     } finally {
       setIsLoading(false);
     }
@@ -166,11 +155,23 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         localStorage.setItem('inheritance_google_user', JSON.stringify(userInfo));
       } catch {}
 
-      // Immediately sync all existing stored memories & Google Doc to Drive!
-      setIsSyncingDrive(true);
-      syncAllEntriesToDrive(token, folderId, speakerName, entries)
-        .catch((e) => console.warn('[Initial Drive Sync note]', e))
-        .finally(() => setIsSyncingDrive(false));
+      // Check if user already has saved stories in their Google Drive folder!
+      const driveEntries = await fetchArchiveIndexFromDrive(token, folderId);
+      if (driveEntries && driveEntries.length > 0) {
+        for (const de of driveEntries) {
+          try {
+            await saveStoryToStorage(de);
+          } catch {}
+        }
+        const merged = await getAllStoredEntries();
+        setEntries(merged.filter((e) => !e.isSample && !e.id.startsWith('story-')));
+      } else {
+        // Immediately sync local memories to their Drive!
+        setIsSyncingDrive(true);
+        syncAllEntriesToDrive(token, folderId, speakerName, entries)
+          .catch((e) => console.warn('[Initial Drive Sync note]', e))
+          .finally(() => setIsSyncingDrive(false));
+      }
     } catch (err: any) {
       console.warn('[Google Sign-In error]', err);
       throw err;
@@ -197,10 +198,21 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         localStorage.setItem('inheritance_google_user', JSON.stringify(userInfo));
       } catch {}
 
-      setIsSyncingDrive(true);
-      syncAllEntriesToDrive(token, folderId, speakerName, entries)
-        .catch((e) => console.warn('[OAuth Callback Drive Sync note]', e))
-        .finally(() => setIsSyncingDrive(false));
+      const driveEntries = await fetchArchiveIndexFromDrive(token, folderId);
+      if (driveEntries && driveEntries.length > 0) {
+        for (const de of driveEntries) {
+          try {
+            await saveStoryToStorage(de);
+          } catch {}
+        }
+        const merged = await getAllStoredEntries();
+        setEntries(merged.filter((e) => !e.isSample && !e.id.startsWith('story-')));
+      } else {
+        setIsSyncingDrive(true);
+        syncAllEntriesToDrive(token, folderId, speakerName, entries)
+          .catch((e) => console.warn('[OAuth Callback Drive Sync note]', e))
+          .finally(() => setIsSyncingDrive(false));
+      }
     } catch (err) {
       console.warn('[handleOAuthCallback error]', err);
     }
