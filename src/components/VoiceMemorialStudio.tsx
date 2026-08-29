@@ -268,13 +268,12 @@ export const VoiceMemorialStudio: React.FC<{ onSaved?: () => void }> = ({ onSave
         setClonedVoiceId(result.voiceId);
       }
       setIsVoiceCloned(result.isCustomCloned);
-      return;
-    } catch (hfErr) {
-      console.warn('[Voice synthesis offline note]:', hfErr);
+    } catch (hfErr: any) {
+      console.error('[Voice synthesis error]:', hfErr);
+      setErrorMessage(hfErr?.message || 'Voice cloning failed. Please ensure at least 3-5 seconds of clear audio is recorded.');
     } finally {
       setIsSynthesizingVoice(false);
     }
-    setActiveModelName('On-Device Neural Speech');
   };
 
   /* ─── 4. Playback Controls ─── */

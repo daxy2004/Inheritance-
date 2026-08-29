@@ -276,48 +276,55 @@ export async function directElevenLabsVoiceClone(
 
   // 1. If user provided a voice sample and we don't already have a cloned voiceId for this session, create the clone!
   if (audioFile && !existingVoiceId) {
-    try {
+    if (audioFile.size < 1000) {
+      throw new Error('Audio recording too short. Please record or upload at least 3-5 seconds of voice.');
+    }
+
+    await ensureVoiceSlotAvailable();
+
+    const formData = new FormData();
+    formData.append('name', `${personName.trim() || 'Family Elder'} (${Date.now().toString().slice(-4)})`);
+    formData.append('description', `Instant Multilingual Voice Clone for ${personName} (${language.toUpperCase()})`);
+    formData.append('labels', JSON.stringify({ language, type: 'family-archive' }));
+    formData.append('files', audioFile, audioFile.name || 'voice_sample.wav');
+
+    let cloneRes = await fetch('https://api.elevenlabs.io/v1/voices/add', {
+      method: 'POST',
+      headers: {
+        'xi-api-key': ELEVENLABS_KEY,
+      },
+      body: formData,
+    });
+
+    if (!cloneRes.ok && (cloneRes.status === 400 || cloneRes.status === 429)) {
+      // If blocked by voice limit or transient error, force free slots and retry once
+      console.log('[ElevenLabs] Retrying voice add after slot cleanup...');
       await ensureVoiceSlotAvailable();
-
-      const formData = new FormData();
-      formData.append('name', `${personName.trim()} (${Date.now().toString().slice(-4)})`);
-      formData.append('description', `Instant Multilingual Voice Clone for ${personName} (${language.toUpperCase()})`);
-      formData.append('labels', JSON.stringify({ language, type: 'family-archive' }));
-      formData.append('files', audioFile, audioFile.name || 'voice-sample.wav');
-
-      let cloneRes = await fetch('https://api.elevenlabs.io/v1/voices/add', {
+      cloneRes = await fetch('https://api.elevenlabs.io/v1/voices/add', {
         method: 'POST',
         headers: {
           'xi-api-key': ELEVENLABS_KEY,
         },
         body: formData,
       });
+    }
 
-      if (!cloneRes.ok && cloneRes.status === 400) {
-        // If still blocked by voice limit, force free a slot and retry once
-        await ensureVoiceSlotAvailable();
-        cloneRes = await fetch('https://api.elevenlabs.io/v1/voices/add', {
-          method: 'POST',
-          headers: {
-            'xi-api-key': ELEVENLABS_KEY,
-          },
-          body: formData,
-        });
+    if (cloneRes.ok) {
+      const cloneData = await cloneRes.json();
+      if (cloneData.voice_id) {
+        targetVoiceId = cloneData.voice_id;
+        isCustomCloned = true;
+        console.log(`[ElevenLabs] Successfully created Instant Voice Clone for ${personName}: ${targetVoiceId}`);
       }
-
-      if (cloneRes.ok) {
-        const cloneData = await cloneRes.json();
-        if (cloneData.voice_id) {
-          targetVoiceId = cloneData.voice_id;
-          isCustomCloned = true;
-          console.log(`[ElevenLabs] Successfully created Instant Voice Clone for ${personName}: ${targetVoiceId}`);
-        }
-      } else {
-        const errBody = await cloneRes.text();
-        console.warn('[ElevenLabs Voice Add Error Response]', errBody);
-      }
-    } catch (e) {
-      console.warn('[ElevenLabs Clone Add Exception]', e);
+    } else {
+      const errBody = await cloneRes.text();
+      console.error('[ElevenLabs Voice Add Error]', cloneRes.status, errBody);
+      let userMsg = 'Voice cloning could not process audio sample.';
+      try {
+        const parsed = JSON.parse(errBody);
+        if (parsed.detail?.message) userMsg = parsed.detail.message;
+      } catch (_) {}
+      throw new Error(`Voice Cloning Error: ${userMsg}. Please record 5-10 seconds of clear speech.`);
     }
   }
 
@@ -333,9 +340,9 @@ export async function directElevenLabsVoiceClone(
       text,
       model_id: 'eleven_multilingual_v2',
       voice_settings: {
-        stability: 0.45,
-        similarity_boost: 0.90,
-        style: 0.35,
+        stability: 0.35,
+        similarity_boost: 0.95,
+        style: 0.40,
         use_speaker_boost: true,
       },
     }),
