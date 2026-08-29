@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { AppProvider, useApp } from './state/AppContext';
 import { BottomNav, ViewTab } from './components/BottomNav';
 import { CaptureBooth } from './components/CaptureBooth';
@@ -7,21 +7,27 @@ import { AskArchive } from './components/AskArchive';
 import { HeirloomBook } from './components/HeirloomBook';
 import { VoiceMemorialStudio } from './components/VoiceMemorialStudio';
 import { GoogleAuthHeader } from './components/GoogleAuthHeader';
-import { GoogleSignInGate } from './components/GoogleSignInGate';
 import { InstallPwaBanner } from './components/InstallPwaBanner';
 import { OfflineIndicator } from './components/OfflineIndicator';
 import { Sparkles } from 'lucide-react';
 
 function AppContent() {
-  const { isLoading, entries, speakerName, googleUser } = useApp();
+  const { isLoading, entries, speakerName, handleOAuthCallback } = useApp();
   const [currentTab, setCurrentTab] = useState<ViewTab>('family');
-  const [isGuest, setIsGuest] = useState(() => {
-    try {
-      return localStorage.getItem('inheritance_seen_welcome') === 'true';
-    } catch {
-      return false;
+
+  // Handle OAuth hash token callback if redirected from Google OAuth
+  useEffect(() => {
+    if (typeof window !== 'undefined' && window.location.hash.includes('access_token=')) {
+      const hash = window.location.hash.substring(1);
+      const params = new URLSearchParams(hash);
+      const token = params.get('access_token');
+      if (token && handleOAuthCallback) {
+        handleOAuthCallback(token);
+        // Clear hash from URL
+        window.history.replaceState(null, '', window.location.pathname);
+      }
     }
-  });
+  }, [handleOAuthCallback]);
 
   if (isLoading) {
     return (
@@ -41,11 +47,6 @@ function AppContent() {
         </div>
       </div>
     );
-  }
-
-  // Welcome Gate (Direct entry or Google Drive connect)
-  if (!googleUser && !isGuest) {
-    return <GoogleSignInGate onGuestContinue={() => setIsGuest(true)} />;
   }
 
   return (

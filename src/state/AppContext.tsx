@@ -44,6 +44,7 @@ interface AppState {
   signInWithGoogle: () => Promise<void>;
   signOutGoogle: () => void;
   syncAllToGoogleDrive: () => Promise<number>;
+  handleOAuthCallback: (token: string) => Promise<void>;
 }
 
 const AppContext = createContext<AppState | null>(null);
@@ -176,6 +177,35 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     }
   }, [speakerName, entries]);
 
+  const handleOAuthCallback = useCallback(async (token: string) => {
+    try {
+      const profile = await fetchGoogleProfile(token);
+      const folderId = await getOrCreateDriveFolder(token, `${speakerName}'s Living Family Archive`);
+      const folderUrl = `https://drive.google.com/drive/folders/${folderId}`;
+
+      const userInfo: GoogleUserInfo = {
+        email: profile.email,
+        name: profile.name,
+        picture: profile.picture,
+        accessToken: token,
+        folderId,
+        folderUrl,
+      };
+
+      setGoogleUser(userInfo);
+      try {
+        localStorage.setItem('inheritance_google_user', JSON.stringify(userInfo));
+      } catch {}
+
+      setIsSyncingDrive(true);
+      syncAllEntriesToDrive(token, folderId, speakerName, entries)
+        .catch((e) => console.warn('[OAuth Callback Drive Sync note]', e))
+        .finally(() => setIsSyncingDrive(false));
+    } catch (err) {
+      console.warn('[handleOAuthCallback error]', err);
+    }
+  }, [speakerName, entries]);
+
   const signOutGoogle = useCallback(() => {
     setGoogleUser(null);
     try {
@@ -267,6 +297,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         signInWithGoogle,
         signOutGoogle,
         syncAllToGoogleDrive,
+        handleOAuthCallback,
       }}
     >
       {children}
