@@ -10,6 +10,8 @@ import { StoryEntry, QAMessage, MemoirBook, Theme, THEME_LABELS, Language } from
 import { computeQACacheKey, getCachedQAResponse, setCachedQAResponse } from '../storage/db';
 import { TRANSLATIONS } from '../i18n/translations';
 
+import { directAskArchive } from '../services/aiDirectService';
+
 /* ─── Build transcript context with language annotations ─── */
 function buildTranscriptsContext(entries: StoryEntry[]): string {
   return entries
@@ -20,7 +22,7 @@ function buildTranscriptsContext(entries: StoryEntry[]): string {
     .join('\n---\n');
 }
 
-/* ─── Ask the Archive (OpenRouter DeepSeek via Server Proxy + Local Cache) ─── */
+/* ─── Ask the Archive (OpenRouter DeepSeek / Gemini + Local Cache) ─── */
 
 export async function askArchive(
   question: string,
@@ -40,7 +42,7 @@ export async function askArchive(
     language,
   };
 
-  // 1. Check local IndexedDB cache first (works 100% offline with zero network dependency)
+  // 1. Check local IndexedDB cache first
   try {
     const cached = await getCachedQAResponse(cacheKey);
     if (cached) {
@@ -56,50 +58,42 @@ export async function askArchive(
     console.warn('[Cloud/Storage] Cache lookup note:', err);
   }
 
-  // 2. Call server-side OpenRouter DeepSeek proxy
+  // 2. Direct Cloud Call (OpenRouter DeepSeek v4 Pro / Google Gemini)
   const transcriptsContext = buildTranscriptsContext(entries);
 
   try {
-    const res = await fetch('/api/ask-archive', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        question,
-        transcriptsContext,
-        speakerName,
-        requestedLanguage: language,
-      }),
-    });
+    const data = await directAskArchive(
+      question,
+      transcriptsContext,
+      speakerName,
+      language,
+    );
 
-    const contentType = res.headers.get('content-type') || '';
-    if (res.ok && contentType.includes('application/json')) {
-      const data = await res.json();
-      const answerPayload = {
-        answer: data.answer || 'Thank you for asking.',
-        groundedInStoryIds: Array.isArray(data.groundedInStoryIds) ? data.groundedInStoryIds : [],
-        isGrounded: Boolean(data.isGrounded),
-        relevantQuote: data.relevantQuote,
-        suggestedFollowUp: data.suggestedFollowUp,
-      };
+    const answerPayload = {
+      answer: data.answer || 'Thank you for asking.',
+      groundedInStoryIds: Array.isArray(data.groundedInStoryIds) ? data.groundedInStoryIds : [],
+      isGrounded: Boolean(data.isGrounded),
+      relevantQuote: data.relevantQuote,
+      suggestedFollowUp: data.suggestedFollowUp,
+    };
 
-      // 3. Cache response locally in IndexedDB
-      setCachedQAResponse(
-        cacheKey,
-        question,
-        contextIds.join(','),
-        answerPayload,
-      ).catch(() => {});
+    // 3. Cache response locally in IndexedDB
+    setCachedQAResponse(
+      cacheKey,
+      question,
+      contextIds.join(','),
+      answerPayload,
+    ).catch(() => {});
 
-      return {
-        ...baseMessage,
-        text: answerPayload.answer,
-        groundedInIds: answerPayload.groundedInStoryIds,
-        relevantQuote: answerPayload.relevantQuote,
-        suggestedFollowUp: answerPayload.suggestedFollowUp,
-      };
-    }
+    return {
+      ...baseMessage,
+      text: answerPayload.answer,
+      groundedInIds: answerPayload.groundedInStoryIds,
+      relevantQuote: answerPayload.relevantQuote,
+      suggestedFollowUp: answerPayload.suggestedFollowUp,
+    };
   } catch (err) {
-    console.warn('[Cloud] OpenRouter proxy call offline/failed, using local fallback:', err);
+    console.warn('[Cloud] Direct AI note, using local grounded fallback:', err);
   }
 
   // 4. Multilingual Local Grounded Extraction Fallback

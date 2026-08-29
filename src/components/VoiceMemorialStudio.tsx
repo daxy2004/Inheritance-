@@ -3,6 +3,7 @@ import { useApp } from '../state/AppContext';
 import { Heart, Sparkles, Music, Image, Play, Pause, RotateCcw, Check, AlertCircle, Loader2, Volume2, ShieldCheck } from 'lucide-react';
 import { StoryEntry, Theme, Language, SUPPORTED_LANGUAGES } from '../types';
 import { LanguageSelector } from './LanguageSelector';
+import { directGenerateMemorialNarrative, directElevenLabsVoiceClone } from '../services/aiDirectService';
 
 export const VoiceMemorialStudio: React.FC<{ onSaved?: () => void }> = ({ onSaved }) => {
   const { addEntry, language, setLanguage, t } = useApp();
@@ -102,34 +103,24 @@ export const VoiceMemorialStudio: React.FC<{ onSaved?: () => void }> = ({ onSave
       let theme: Theme = 'Family';
       let phoneticSpeech = '';
 
-      // Step 1: Attempt Gemini 3.5 Flash cloud generation
+      // Step 1: Call Gemini 3.5 Flash / OpenRouter directly
       try {
-        const res = await fetch('/api/memorial-narrative', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            personName: personName.trim() || 'Loved One',
-            relationship: relationship.trim() || 'Family Member',
-            memories: memoriesText.trim(),
-            language,
-            audioBase64,
-            audioMimeType,
-          }),
-        });
+        const result = await directGenerateMemorialNarrative(
+          personName,
+          relationship,
+          memoriesText,
+          language,
+          audioBase64,
+          audioMimeType,
+        );
 
-        const contentType = res.headers.get('content-type') || '';
-        if (res.ok && contentType.includes('application/json')) {
-          const data = await res.json();
-          monologue = data.monologue || '';
-          phoneticSpeech = data.phoneticSpeech || '';
-          title = data.title || title;
-          pullQuote = data.pullQuote || '';
-          theme = (data.theme as Theme) || 'Family';
-        } else {
-          throw new Error('API endpoint returned non-JSON/offline');
-        }
+        monologue = result.monologue || '';
+        phoneticSpeech = result.phoneticSpeech || '';
+        title = result.title || title;
+        pullQuote = result.pullQuote || '';
+        theme = result.theme || 'Family';
       } catch (cloudErr) {
-        console.warn('[VoiceMemorial] Cloud generator offline, using local storyteller:', cloudErr);
+        console.warn('[VoiceMemorial] Cloud generator note, using local storyteller:', cloudErr);
         const name = personName.trim() || (language === 'hi' ? 'हमारे प्रियजन' : language === 'kn' ? 'ನಮ್ಮ ಪ್ರೀತಿಪಾತ್ರರು' : language === 'ta' ? 'நம் அன்பிற்குரியவர்' : 'Our Beloved');
         const rel = relationship.trim() || (language === 'hi' ? 'परिवार' : language === 'kn' ? 'ಕುಟುಂಬ' : language === 'ta' ? 'குடும்பம்' : 'Family');
 
@@ -169,57 +160,27 @@ export const VoiceMemorialStudio: React.FC<{ onSaved?: () => void }> = ({ onSave
     }
   };
 
-  /* ─── 4. Synthesize Neural Voice (ElevenLabs / Web Speech Fallback) ─── */
+  /* ─── 4. Synthesize Neural Voice (ElevenLabs Instant Voice Cloning) ─── */
   const synthesizeNeuralVoice = async (text: string, voice = voicePersona, phoneticText?: string) => {
     setIsSynthesizingVoice(true);
     try {
-      let referenceAudioBase64: string | undefined;
-      let referenceAudioMimeType: string | undefined;
+      const result = await directElevenLabsVoiceClone(
+        text,
+        voice,
+        audioFile,
+        personName.trim() || 'Family Elder',
+      );
 
-      if (audioFile) {
-        referenceAudioMimeType = audioFile.type || 'audio/webm';
-        referenceAudioBase64 = await fileToBase64(audioFile);
-      }
-
-      const hfRes = await fetch('/api/clone-voice-hf', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          text,
-          phoneticText,
-          language,
-          voiceName: voice,
-          referenceAudioBase64,
-          referenceAudioMimeType,
-          personName: personName.trim() || undefined,
-        }),
-      });
-
-      const hfContentType = hfRes.headers.get('content-type') || '';
-      if (hfRes.ok && hfContentType.includes('application/json')) {
-        const hfData = await hfRes.json();
-        if (hfData.audioBase64) {
-          const byteCharacters = atob(hfData.audioBase64);
-          const byteNumbers = new Array(byteCharacters.length);
-          for (let i = 0; i < byteCharacters.length; i++) {
-            byteNumbers[i] = byteCharacters.charCodeAt(i);
-          }
-          const byteArray = new Uint8Array(byteNumbers);
-          const blob = new Blob([byteArray], { type: hfData.mimeType || 'audio/mpeg' });
-          const url = URL.createObjectURL(blob);
-
-          setNeuralAudioBlob(blob);
-          setNeuralAudioUrl(url);
-          setActiveModelName(hfData.model);
-          return;
-        }
-      }
+      setNeuralAudioBlob(result.blob);
+      setNeuralAudioUrl(result.url);
+      setActiveModelName(result.model);
+      return;
     } catch (hfErr) {
-      console.warn('[Voice synthesis offline fallback]:', hfErr);
+      console.warn('[Voice synthesis offline note]:', hfErr);
     } finally {
       setIsSynthesizingVoice(false);
     }
-    setActiveModelName('On-Device Neural Speech (Offline Ready)');
+    setActiveModelName('On-Device Neural Speech');
   };
 
   /* ─── 5. Playback Controls ─── */
