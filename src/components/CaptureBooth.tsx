@@ -154,17 +154,6 @@ export const CaptureBooth: React.FC = () => {
       setDuration((d) => d + 1);
     }, 1000);
 
-    // Live speech recognition
-    transcriptionRef.current = startLiveTranscription(
-      (interim) => setTranscript(interim),
-      (final) => setTranscript(final),
-      (error) => {
-        console.warn('[OnDevice] Transcription note:', error);
-        setTranscriptionNotice(error);
-      },
-      language,
-    );
-
     // Start MediaRecorder & Audio Visualizer
     try {
       const constraints: MediaStreamConstraints = type === 'video'
@@ -243,13 +232,10 @@ export const CaptureBooth: React.FC = () => {
         stream.getTracks().forEach((t) => t.stop());
         streamRef.current = null;
 
-        // If transcript is still empty or brief, automatically run Gemini audio transcription
-        setTranscript((current) => {
-          if (!current.trim() && blob.size > 0) {
-            handleAiTranscribe(blob);
-          }
-          return current;
-        });
+        // Automatically run high-precision Gemini audio transcription
+        if (blob.size > 0) {
+          handleAiTranscribe(blob);
+        }
       };
 
       // Collect data every 1000ms for continuous streaming buffers
