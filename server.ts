@@ -289,8 +289,16 @@ app.post('/api/clone-voice-hf', async (req, res) => {
           voiceId = elevenVoiceMap[voiceName] || 'JBFqnCBsd6RMkjVDRZzb';
         }
 
-        // Synthesize spoken monologue with Multilingual v2 with calm, deliberate elder pacing
-        const speechPayloadText = (req.body.phoneticText || text).slice(0, 2500);
+        // Clean and prepare speech text for natural human cadence
+        const rawSpeech = (req.body.phoneticText || text || '').slice(0, 2500);
+        const speechPayloadText = rawSpeech
+          .replace(/[*_#`~>[\](){}]/g, '')
+          .replace(/[\u0964\u0965]/g, '.')
+          .replace(/[;—–]/g, ', ')
+          .replace(/["'«»“”‘’]/g, '')
+          .replace(/\s+/g, ' ')
+          .trim();
+
         const elevenRes = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`, {
           method: 'POST',
           headers: {
@@ -300,13 +308,11 @@ app.post('/api/clone-voice-hf', async (req, res) => {
           body: JSON.stringify({
             text: speechPayloadText,
             model_id: 'eleven_multilingual_v2',
-            ...(language === 'hi' || language === 'ta' || language === 'en' ? { language_code: language } : {}),
             voice_settings: {
-              stability: 0.65,
-              similarity_boost: 0.90,
-              style: 0.35,
+              stability: 0.60,
+              similarity_boost: 0.85,
+              style: 0.0,
               use_speaker_boost: true,
-              speed: 0.86,
             },
           }),
         });

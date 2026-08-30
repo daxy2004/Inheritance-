@@ -122,6 +122,22 @@ Return your answer strictly in valid JSON format:
   throw new Error('Cloud AI unavailable');
 }
 
+/* ─── Pronunciation & Speech Text Normalizer ─── */
+export function cleanAndPunctuateForSpeech(rawText: string, lang: Language = 'en'): string {
+  if (!rawText) return '';
+  let clean = rawText
+    .replace(/[*_#`~>[\](){}]/g, '') // remove markdown symbols that distort TTS
+    .replace(/[\u0964\u0965]/g, '.') // convert Devanagari full stops to periods
+    .replace(/[;—–]/g, ', ') // replace em-dashes / semicolons with natural breathing commas
+    .replace(/["'«»“”‘’]/g, '') // remove quotes that alter intonation
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  // Ensure space after punctuation for natural breath pacing
+  clean = clean.replace(/([.,!?])(?=[^\s])/g, '$1 ');
+  return clean;
+}
+
 /* ─── 2. Direct Gemini Memorial Narrative Generator ─── */
 export async function directGenerateMemorialNarrative(
   personName: string,
@@ -133,21 +149,27 @@ export async function directGenerateMemorialNarrative(
 ): Promise<{ monologue: string; phoneticSpeech: string; pullQuote: string; theme: Theme; title: string }> {
   const langName = language === 'hi' ? 'Hindi (हिन्दी)' : language === 'kn' ? 'Kannada (ಕನ್ನಡ)' : language === 'ta' ? 'Tamil (தமிழ்)' : 'English';
   const langCodeInstruction = language === 'kn'
-    ? 'Write the monologue strictly in native Kannada (ಕನ್ನಡ) script with authentic Karnataka idioms and warm elder tone.'
+    ? 'Write the monologue strictly in native, warm, colloquial spoken Kannada (ಕನ್ನಡ) script. Use natural Karnataka spoken phrases, avoiding complex Sanskrit compounds or archaic literary words. Spell out all numbers in full Kannada words.'
     : language === 'hi'
-    ? 'Write the monologue strictly in native Hindi (हिन्दी) Devanagari script with warm elder tone.'
+    ? 'Write the monologue strictly in native, warm, conversational Hindi (हिन्दी) Devanagari script. Use everyday spoken Hindustani, avoiding overly formal bookish Sanskrit. Spell out all numbers in full Hindi words.'
     : language === 'ta'
-    ? 'Write the monologue strictly in native Tamil (தமிழ்) script with warm familial tone.'
-    : 'Write the monologue in heartfelt, natural conversational English.';
+    ? 'Write the monologue strictly in native, warm, conversational spoken Tamil (தமிழ்) script (எளிய பேச்சு நடை). Avoid rigid classical Senthamizh. Spell out all numbers in full Tamil words.'
+    : 'Write the monologue in heartfelt, natural conversational English with warm, spoken cadence. Spell out numbers as words.';
 
-  const promptInstructions = `You are a compassionate literary legacy biographer for the Inheritance family preservation app.
-Your task is to take memories about ${personName || 'a loved one'} (${relationship || 'Family Member'}) and write a warm, heartfelt, authentic first-person storytelling monologue in ${langName}.
+  const promptInstructions = `You are a compassionate oral historian and literary legacy biographer for the Inheritance family preservation app.
+Your task is to take memories about ${personName || 'a loved one'} (${relationship || 'Family Member'}) and write an extraordinarily warm, heartfelt, authentic first-person storytelling monologue in ${langName}.
 ${langCodeInstruction}
-The monologue should sound like an elder speaking calmly, slowly, and warmly from the heart about their life, wisdom, and love for family.
+
+CRITICAL SPOKEN CADENCE & PRONUNCIATION GUIDELINES:
+1. Write in short, rhythmic sentences (8 to 15 words per sentence) that sound natural and effortless when spoken aloud.
+2. Insert natural commas (,) wherever a speaker would naturally pause to take a gentle breath.
+3. The tone must be intimate and affectionate, like a loving elder sitting by your side sharing cherished memories and blessings.
+4. Avoid tongue-twisting compound words, dense jargon, or rigid grammar.
+5. Do NOT include quotation marks, markdown asterisks, or bracketed directions.
 
 Return ONLY a valid JSON object matching this schema:
 {
-  "monologue": "First-person spoken narrative in native ${langName} script (100-200 words)...",
+  "monologue": "First-person spoken narrative in native ${langName} script (100-180 words with natural commas for speech)...",
   "phoneticSpeech": "The exact same monologue in phonetic Latin transliteration for voice cloning...",
   "pullQuote": "One memorable, touching quote in ${langName}...",
   "theme": "Family" | "Childhood" | "Career" | "Values" | "Recipes" | "Advice",
@@ -331,6 +353,7 @@ export async function directElevenLabsVoiceClone(
   }
 
   // 2. Synthesize audio with ElevenLabs Multilingual v2 (Indic script autodetection for Kannada, Hindi, Tamil, English)
+  const speechText = cleanAndPunctuateForSpeech(text, language);
   const ttsUrl = `https://api.elevenlabs.io/v1/text-to-speech/${targetVoiceId}?output_format=mp3_44100_128`;
   const ttsRes = await fetch(ttsUrl, {
     method: 'POST',
@@ -339,10 +362,10 @@ export async function directElevenLabsVoiceClone(
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
-      text,
+      text: speechText,
       model_id: 'eleven_multilingual_v2',
       voice_settings: {
-        stability: 0.70,
+        stability: 0.60,
         similarity_boost: 0.85,
         style: 0.0,
         use_speaker_boost: true,
