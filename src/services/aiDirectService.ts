@@ -8,9 +8,9 @@
 
 import { Theme, Language, StoryEntry, QAMessage } from '../types';
 
-export const GEMINI_KEY: string = (process.env as any)?.GEMINI_API_KEY || 'AQ.Ab8RN6IsdVsmE_j3o30fPiyRDnvj5HkNQFljZrXRnwjU_iznGQ';
-export const ELEVENLABS_KEY: string = (process.env as any)?.ELEVENLABS_API_KEY || 'sk_6081c86f1f754496fb7694b54fba3ddbad43c89509d27e48';
-export const OPENROUTER_KEY: string = (process.env as any)?.OPENROUTER_API_KEY || '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';
+export const GEMINI_KEY: string = (process.env as any)?.GEMINI_API_KEY || '';
+export const ELEVENLABS_KEY: string = (process.env as any)?.ELEVENLABS_API_KEY || '';
+export const OPENROUTER_KEY: string = (process.env as any)?.OPENROUTER_API_KEY || '';
 
 /* ─── 1. Direct OpenRouter / Google Gemini Grounded Archive Q&A ─── */
 export async function directAskArchive(
