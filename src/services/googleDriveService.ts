@@ -5,7 +5,7 @@
 import { getMediaBlobFromStorage } from '../storage/db';
 import { StoryEntry } from '../types';
 
-export const DEFAULT_CLIENT_ID = '249104411965-5sa7u1mojbjejsqnp5fkrma77hu01mkr.apps.googleusercontent.com';
+export const DEFAULT_CLIENT_ID = (process.env as any)?.GOOGLE_CLIENT_ID || '';
 
 /* ─── 1. Request Google Drive OAuth Token ─── */
 export function requestGoogleToken(clientId = DEFAULT_CLIENT_ID): Promise<string> {

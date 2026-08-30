@@ -6,8 +6,8 @@ const config: CapacitorConfig = {
   webDir: 'dist',
   plugins: {
     GoogleAuth: {
-      clientId: '249104411965-5sa7u1mojbjejsqnp5fkrma77hu01mkr.apps.googleusercontent.com',
-      serverClientId: '249104411965-5sa7u1mojbjejsqnp5fkrma77hu01mkr.apps.googleusercontent.com',
+      clientId: process.env.GOOGLE_CLIENT_ID || '',
+      serverClientId: process.env.GOOGLE_CLIENT_ID || '',
       scopes: ['profile', 'email', 'https://www.googleapis.com/auth/drive.file'],
     },
   },
