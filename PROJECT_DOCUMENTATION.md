@@ -101,35 +101,45 @@ Inheritance bridges the generational gap by combining **conversational AI, zero-
 
 ---
 
-## 5. LOCAL & ON-DEVICE PROCESSING ARCHITECTURE
+## 5. LOCAL & ON-DEVICE PROCESSING VS. CLOUD AI ARCHITECTURE
 
-To ensure high responsiveness, battery efficiency, and strict privacy, Inheritance offloads significant compute to the phone's native hardware rather than making cloud round-trips for every action:
+To ensure high responsiveness, battery efficiency, and zero vendor lock-in, Inheritance adopts a **Hybrid Edge-Cloud Architecture**: heavy neural reasoning and voice cloning are routed to low-latency cloud models, while all audio signal processing, graph calculations, and privacy-sensitive storage execute 100% locally on the device.
 
 ```
 ┌───────────────────────────────────────────────────────────────────────────────────────┐
-│                                 ON-DEVICE PROCESSING                                  │
+│                        1. 100% ON-DEVICE / LOCAL PROCESSING                           │
 ├───────────────────────────────────────────────────────────────────────────────────────┤
-│ 1. Real-Time Audio Engine:                                                            │
-│    • 44.1kHz PCM Audio sampling via Web Audio API & MediaRecorder.                   │
-│    • Real-time Fast Fourier Transform (FFT) spectrogram & waveform rendering.        │
-│    • Hardware-accelerated mic gain normalization and noise suppression.               │
+│ • Real-Time Audio Extraction & Downsampling:                                          │
+│   Uses Web Audio API (AudioContext & OfflineAudioContext) on-device to decode video   │
+│   and audio streams into high-precision 16kHz mono WAV PCM buffers with 0 cloud lag.  │
 │                                                                                       │
-│ 2. Local-First Encrypted Database:                                                    │
-│    • Zero-latency local storage using IndexedDB & LocalStorage.                       │
-│    • Audio Blobs & Keepsake Portraits stored as local URIs / Base64 buffers.          │
-│    • Complete offline playback for all previously generated memoirs and recordings.   │
+│ • Live 64-Band FFT Audio Visualizer:                                                  │
+│   Computes Fast Fourier Transform frequency bins in real-time via AnalyserNode at    │
+│   60 FPS on the device GPU canvas during recording.                                   │
 │                                                                                       │
-│ 3. On-Device Lineage & Graph Calculations:                                            │
-│    • Kinship traversal algorithms (parent-child-sibling relationships).                │
-│    • Dynamic generational tree rendering without external graphing dependencies.     │
+│ • Zero-Knowledge Local Encrypted Archive:                                             │
+│   All audio clips, video recordings, keepsake portraits, and story transcripts are    │
+│   persisted directly in on-device IndexedDB & LocalStorage for instant offline access.│
 │                                                                                       │
-│ 4. On-Device Speech Recognition Bridge:                                               │
-│    • Native Android SpeechRecognizer integration via Capacitor for offline prompts.   │
+│ • Kinship & Generative Lineage Graph:                                                 │
+│   Generational depth traversal, paternal/maternal branch filters, and relational maps │
+│   compute dynamically in pure TypeScript on the device without external graphing APIs.│
 │                                                                                       │
-│ 5. Local Acoustic Heuristics & Sentiment Tagging:                                     │
-│    • Rule-based sentiment classification & mood badge assignment (Nostalgic, Joy).   │
+│ • Local Multilingual Theme & Keyword Extraction:                                      │
+│   Rule-based heuristic classifier tags memories into Childhood, Family, Career,       │
+│   Values, and Recipes across Kannada, Hindi, Tamil, and English completely offline.   │
+├───────────────────────────────────────────────────────────────────────────────────────┤
+│                         2. CLOUD AI INFERENCE & GENERATION                            │
+├───────────────────────────────────────────────────────────────────────────────────────┤
+│ • Speech-to-Text Transcription: Google Gemini 3.6/3.5 Flash & OpenRouter Multimodal.  │
+│ • Grounded Ancestor Q&A (Ask): OpenRouter (Minimax M3 / DeepSeek V4) & Gemini Flash.  │
+│ • Zero-Shot Voice Cloning: ElevenLabs Multilingual v2 with Indic script auto-routing. │
+│ • Cloud Vault Sync: Google Drive API v3 (OAuth 2.0 user-owned backup).                │
 └───────────────────────────────────────────────────────────────────────────────────────┘
 ```
+
+> **Why are heavy Neural LLMs (GGUF/ONNX) not executed locally on the phone?**  
+> Running multi-gigabyte local LLMs (e.g. 7B/8B GGUF weights) inside a mobile WebView causes intense thermal throttling, exhausts 4GB+ of mobile RAM, and drains battery life rapidly. Our hybrid model offloads heavy neural inference to microsecond cloud endpoints while keeping all user data, signal processing, and audio synthesis pipelines local on-device.
 
 ---
 
