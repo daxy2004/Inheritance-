@@ -369,7 +369,94 @@ export async function directElevenLabsVoiceClone(
   };
 }
 
-/* ─── 4. Direct Gemini 3.6 / 3.5 Flash Audio Transcription ─── */
+/* ─── 4. Client-side Audio Extraction & Direct Multimodal Transcription ─── */
+async function extractAudioWavFromMediaBlob(mediaBlob: Blob): Promise<{ base64: string; mimeType: string }> {
+  try {
+    const AudioContextClass = typeof window !== 'undefined'
+      ? (window as any).AudioContext || (window as any).webkitAudioContext
+      : null;
+
+    if (AudioContextClass) {
+      const arrayBuffer = await mediaBlob.arrayBuffer();
+      const audioCtx = new AudioContextClass();
+      const audioBuffer = await audioCtx.decodeAudioData(arrayBuffer.slice(0));
+      
+      const targetSampleRate = 16000;
+      const numChannels = 1;
+      const length = Math.max(1, Math.floor(audioBuffer.duration * targetSampleRate));
+      
+      const offlineCtx = new ((window as any).OfflineAudioContext || (window as any).webkitOfflineAudioContext)(
+        numChannels,
+        length,
+        targetSampleRate
+      );
+      
+      const source = offlineCtx.createBufferSource();
+      source.buffer = audioBuffer;
+      source.connect(offlineCtx.destination);
+      source.start(0);
+      
+      const renderedBuffer = await offlineCtx.startRendering();
+      const channelData = renderedBuffer.getChannelData(0);
+      
+      const wavBuffer = new ArrayBuffer(44 + channelData.length * 2);
+      const view = new DataView(wavBuffer);
+      
+      const writeString = (offset: number, string: string) => {
+        for (let i = 0; i < string.length; i++) {
+          view.setUint8(offset + i, string.charCodeAt(i));
+        }
+      };
+      
+      writeString(0, 'RIFF');
+      view.setUint32(4, 36 + channelData.length * 2, true);
+      writeString(8, 'WAVE');
+      writeString(12, 'fmt ');
+      view.setUint32(16, 16, true);
+      view.setUint16(20, 1, true); // PCM
+      view.setUint16(22, 1, true); // Mono
+      view.setUint32(24, targetSampleRate, true);
+      view.setUint32(28, targetSampleRate * 2, true);
+      view.setUint16(32, 2, true);
+      view.setUint16(34, 16, true);
+      writeString(36, 'data');
+      view.setUint32(40, channelData.length * 2, true);
+      
+      let offset = 44;
+      for (let i = 0; i < channelData.length; i++, offset += 2) {
+        const s = Math.max(-1, Math.min(1, channelData[i]));
+        view.setInt16(offset, s < 0 ? s * 0x8000 : s * 0x7FFF, true);
+      }
+      
+      let binary = '';
+      const bytes = new Uint8Array(wavBuffer);
+      const len = bytes.byteLength;
+      for (let i = 0; i < len; i++) {
+        binary += String.fromCharCode(bytes[i]);
+      }
+      const base64 = btoa(binary);
+      if (base64 && base64.length > 50) {
+        return { base64, mimeType: 'audio/wav' };
+      }
+    }
+  } catch (extractErr) {
+    console.warn('[Audio Extraction Fallback]:', extractErr);
+  }
+
+  // Fallback to raw base64 data
+  const base64 = await new Promise<string>((resolve) => {
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      const dataUrl = reader.result as string;
+      resolve(dataUrl.split(',')[1] || '');
+    };
+    reader.readAsDataURL(mediaBlob);
+  });
+
+  const rawMime = mediaBlob.type ? mediaBlob.type.split(';')[0] : 'video/mp4';
+  return { base64, mimeType: rawMime };
+}
+
 export async function directTranscribeAudioBlob(
   audioBlob: Blob,
   language: Language = 'en',
@@ -377,72 +464,83 @@ export async function directTranscribeAudioBlob(
   if (!audioBlob || audioBlob.size === 0) return '';
   const langName = language === 'hi' ? 'Hindi (हिन्दी)' : language === 'kn' ? 'Kannada (ಕನ್ನಡ)' : language === 'ta' ? 'Tamil (தமிழ்)' : 'English';
 
-  if (!GEMINI_KEY) {
-    console.warn('[directTranscribeAudioBlob] GEMINI_KEY not found');
-    return '';
-  }
-
   try {
-    const base64Data = await new Promise<string>((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        const dataUrl = reader.result as string;
-        const parts = dataUrl.split(',');
-        resolve(parts[1] || '');
-      };
-      reader.onerror = reject;
-      reader.readAsDataURL(audioBlob);
-    });
-
+    const { base64: base64Data, mimeType: cleanMime } = await extractAudioWavFromMediaBlob(audioBlob);
     if (!base64Data) return '';
 
-    const mime = audioBlob.type || (audioBlob.type.includes('wav') ? 'audio/wav' : 'audio/webm');
-    const cleanMime = mime.split(';')[0]; // e.g. audio/webm or audio/wav or video/webm
+    const promptText = `You are an expert oral historian and speech-to-text transcriber. Listen carefully to this recording of a family member sharing a memory. Transcribe everything spoken verbatim in its authentic language (${langName}). If spoken in Hindi, Kannada, Tamil, or English, transcribe directly into that respective script. Do NOT summarize, translate, or add commentary. Return ONLY the exact transcribed speech text. If no clear speech is heard, return an empty string.`;
 
-    const promptText = `You are an expert oral historian and speech-to-text transcriber. Listen carefully to this audio recording of a family member sharing a memory. Transcribe everything spoken verbatim in its authentic language (${langName}). If spoken in Hindi, Kannada, Tamil, or English, transcribe directly into that respective script. Do NOT summarize, translate, or add commentary. Return ONLY the exact transcribed speech text.`;
+    // 1. Try Direct Google Gemini Flash models
+    if (GEMINI_KEY) {
+      const candidateModels = ['gemini-3.6-flash', 'gemini-3.5-flash', 'gemini-3.7-flash'];
 
-    const candidateModels = ['gemini-3.6-flash', 'gemini-3.5-flash', 'gemini-3.7-flash'];
+      for (const model of candidateModels) {
+        try {
+          const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${GEMINI_KEY}`;
+          const res = await fetch(geminiUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              contents: [
+                {
+                  parts: [
+                    { text: promptText },
+                    { inlineData: { mimeType: cleanMime, data: base64Data } },
+                  ],
+                },
+              ],
+              generationConfig: { temperature: 0.1 },
+            }),
+          });
 
-    for (const model of candidateModels) {
+          if (res.ok) {
+            const data = await res.json();
+            const text = data.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || '';
+            if (text && text.toLowerCase() !== 'none' && text !== '.') {
+              return text;
+            }
+          } else {
+            console.warn(`[Gemini ${model} transcribe status ${res.status}]`);
+          }
+        } catch (modelErr) {
+          console.warn(`[Gemini ${model} transcribe error]`, modelErr);
+        }
+      }
+    }
+
+    // 2. Multimodal Fallback: OpenRouter google/gemini-2.5-flash
+    if (OPENROUTER_KEY) {
       try {
-        const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${GEMINI_KEY}`;
-        const res = await fetch(geminiUrl, {
+        const dataUrl = `data:${cleanMime};base64,${base64Data}`;
+        const orRes = await fetch('https://openrouter.ai/api/v1/chat/completions', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: {
+            'Authorization': `Bearer ${OPENROUTER_KEY}`,
+            'Content-Type': 'application/json',
+          },
           body: JSON.stringify({
-            contents: [
+            model: 'google/gemini-2.5-flash',
+            messages: [
               {
-                parts: [
-                  {
-                    text: promptText,
-                  },
-                  {
-                    inlineData: {
-                      mimeType: cleanMime,
-                      data: base64Data,
-                    },
-                  },
+                role: 'user',
+                content: [
+                  { type: 'text', text: promptText },
+                  { type: 'image_url', image_url: { url: dataUrl } },
                 ],
               },
             ],
-            generationConfig: {
-              temperature: 0.1,
-            },
           }),
         });
 
-        if (res.ok) {
-          const data = await res.json();
-          const text = data.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || '';
-          if (text) {
-            return text;
+        if (orRes.ok) {
+          const orData = await orRes.json();
+          const orText = orData.choices?.[0]?.message?.content?.trim() || '';
+          if (orText && orText.toLowerCase() !== 'none' && orText !== '.') {
+            return orText;
           }
-        } else {
-          const errText = await res.text();
-          console.warn(`[Gemini ${model} transcription warning]`, res.status, errText);
         }
-      } catch (modelErr) {
-        console.warn(`[Gemini ${model} error]`, modelErr);
+      } catch (orErr) {
+        console.warn('[OpenRouter Audio Transcribe Note]', orErr);
       }
     }
   } catch (err) {
