@@ -6,7 +6,7 @@ import { AppLogo } from './AppLogo';
 import { SUPPORTED_LANGUAGES } from '../types';
 
 export const GoogleSignInGate: React.FC = () => {
-  const { signInWithGoogle, language, t } = useApp();
+  const { signInWithGoogle, continueAsLocalVault, language, t } = useApp();
   const [isSigningIn, setIsSigningIn] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
@@ -23,7 +23,7 @@ export const GoogleSignInGate: React.FC = () => {
       await signInWithGoogle();
     } catch (err: any) {
       console.warn('[Google Auth Gate]', err);
-      setErrorMsg(err?.message || 'Could not connect to Google. Please check your internet connection and try again.');
+      setErrorMsg(err?.message || 'Could not connect to Google. You can also continue with On-Device Vault below.');
     } finally {
       setIsSigningIn(false);
     }
@@ -110,7 +110,7 @@ export const GoogleSignInGate: React.FC = () => {
           </div>
         )}
 
-        {/* Mandatory Sign In Button */}
+        {/* Actions Area */}
         <div className="space-y-2.5 pt-1">
           <button
             onClick={handleSignIn}
@@ -142,14 +142,17 @@ export const GoogleSignInGate: React.FC = () => {
                     d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"
                   />
                 </svg>
-                <span className="tracking-tight">Sign In with Google to Access Archive</span>
+                <span className="tracking-tight">Sign In with Google for Cloud Sync</span>
               </>
             )}
           </button>
 
-          <p className="text-[11px] text-center text-[#7A6A5C] font-medium">
-            Sign in is required to initialize your personal cloud storage folder.
-          </p>
+          <button
+            onClick={continueAsLocalVault}
+            className="w-full py-2.5 px-4 rounded-xl bg-transparent hover:bg-black/5 text-[#7A6A5C] hover:text-[#2C241E] font-medium text-xs border border-[#DECFC0] transition-all cursor-pointer flex items-center justify-center gap-2"
+          >
+            <span>⚡ Continue with On-Device Local Vault (Offline)</span>
+          </button>
         </div>
       </main>
 

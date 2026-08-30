@@ -228,7 +228,7 @@ export async function purgeSampleEntries(): Promise<void> {
     getAllReq.onsuccess = () => {
       const all = getAllReq.result as StoredEntrySchema[];
       for (const item of all) {
-        if (item.isSample || item.id.startsWith('story-')) {
+        if (item.isSample === true || item.id.startsWith('sample-')) {
           entryStore.delete(item.id);
           mediaStore.delete(item.id);
         }

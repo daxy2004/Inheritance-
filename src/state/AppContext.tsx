@@ -45,6 +45,7 @@ interface AppState {
   isSyncingDrive: boolean;
   signInWithGoogle: () => Promise<void>;
   signOutGoogle: () => void;
+  continueAsLocalVault: () => void;
   syncAllToGoogleDrive: () => Promise<number>;
   handleOAuthCallback: (token: string) => Promise<void>;
 }
@@ -93,7 +94,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     try {
       await purgeSampleEntries();
       const stored = await getAllStoredEntries();
-      setEntries(stored.filter((e) => !e.isSample && !e.id.startsWith('story-')));
+      setEntries(stored.filter((e) => !e.isSample));
     } catch (err) {
       console.warn('[AppContext] Storage initialization note:', err);
       setEntries([]);
@@ -124,6 +125,18 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     }
   });
   const [isSyncingDrive, setIsSyncingDrive] = useState(false);
+
+  const continueAsLocalVault = useCallback(() => {
+    const localUser: GoogleUserInfo = {
+      email: 'local@inheritance.app',
+      name: 'Family Archivist',
+      accessToken: 'local-vault-token',
+    };
+    setGoogleUser(localUser);
+    try {
+      localStorage.setItem('inheritance_google_user', JSON.stringify(localUser));
+    } catch {}
+  }, []);
 
   const syncAllToGoogleDrive = useCallback(async (): Promise<number> => {
     if (!googleUser?.accessToken || !googleUser?.folderId) return 0;
@@ -191,19 +204,23 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           } catch {}
         }
         const merged = await getAllStoredEntries();
-        setEntries(merged.filter((e) => !e.isSample && !e.id.startsWith('story-')));
+        setEntries(merged.filter((e) => !e.isSample));
       } else {
-        // Immediately sync local memories to their Drive!
-        setIsSyncingDrive(true);
-        syncAllEntriesToDrive(token, folderId, speakerName, entries)
-          .catch((e) => console.warn('[Initial Drive Sync note]', e))
-          .finally(() => setIsSyncingDrive(false));
+        // Immediately sync existing local memories to their Drive!
+        const localStories = await getAllStoredEntries();
+        const toSync = localStories.filter((e) => !e.isSample);
+        if (toSync.length > 0) {
+          setIsSyncingDrive(true);
+          syncAllEntriesToDrive(token, folderId, speakerName, toSync)
+            .catch((e) => console.warn('[Initial Drive Sync note]', e))
+            .finally(() => setIsSyncingDrive(false));
+        }
       }
     } catch (err: any) {
       console.warn('[Google Sign-In error]', err);
       throw err;
     }
-  }, [speakerName, entries]);
+  }, [speakerName]);
 
   const handleOAuthCallback = useCallback(async (token: string) => {
     try {
@@ -233,17 +250,21 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           } catch {}
         }
         const merged = await getAllStoredEntries();
-        setEntries(merged.filter((e) => !e.isSample && !e.id.startsWith('story-')));
+        setEntries(merged.filter((e) => !e.isSample));
       } else {
-        setIsSyncingDrive(true);
-        syncAllEntriesToDrive(token, folderId, speakerName, entries)
-          .catch((e) => console.warn('[OAuth Callback Drive Sync note]', e))
-          .finally(() => setIsSyncingDrive(false));
+        const localStories = await getAllStoredEntries();
+        const toSync = localStories.filter((e) => !e.isSample);
+        if (toSync.length > 0) {
+          setIsSyncingDrive(true);
+          syncAllEntriesToDrive(token, folderId, speakerName, toSync)
+            .catch((e) => console.warn('[OAuth Callback Drive Sync note]', e))
+            .finally(() => setIsSyncingDrive(false));
+        }
       }
     } catch (err) {
       console.warn('[handleOAuthCallback error]', err);
     }
-  }, [speakerName, entries]);
+  }, [speakerName]);
 
   const signOutGoogle = useCallback(async () => {
     // Auto-sync all audio, video recordings, transcripts, and memoir to Google Drive before signing out
@@ -356,6 +377,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         isSyncingDrive,
         signInWithGoogle,
         signOutGoogle,
+        continueAsLocalVault,
         syncAllToGoogleDrive,
         handleOAuthCallback,
       }}
