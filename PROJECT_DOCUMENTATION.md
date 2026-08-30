@@ -1,300 +1,143 @@
-# PROJECT DOSSIER: INHERITANCE
-## Living Oral Family Memoir & Interactive Ancestral Archive
-**Event**: iQOO City Battles (Aug – Oct 2026) · Bengaluru Battleground  
-**Track**: Track 09 — Open Innovation (Wildcard)  
-**Team**: Dhruv Aruna Kumar (Solo Builder)  
-**Submission Repository**: [github.com/daxy2004/Inheritance-](https://github.com/daxy2004/Inheritance-)  
-**Build Target**: Android Phone-First Application (Capacitor Native APK + Progressive Web Engine)
+# Inheritance — Living Oral Family Memoir & Interactive Ancestral Archive
 
 ---
 
-## TABLE OF CONTENTS
-1. [Executive Summary](#1-executive-summary)
-2. [Problem Statement & Cultural Urgency](#2-problem-statement--cultural-urgency)
-3. [Competitive Analysis: What Others Do vs. What We Do Differently](#3-competitive-analysis-what-others-do-vs-what-we-do-differently)
-4. [The Solution: Inheritance](#4-the-solution-inheritance)
-5. [Local & On-Device Processing Architecture](#5-local--on-device-processing-architecture)
-6. [Core Features & System Modules](#6-core-features--system-modules)
-7. [Comprehensive Tech Stack & Function Directory](#7-comprehensive-tech-stack--function-directory)
-8. [AI Inference, Regional Voice Strategy & RAG Pipeline](#8-ai-inference-regional-voice-strategy--rag-pipeline)
-9. [Hardware & Phone-First Innovation (iQOO Alignment)](#9-hardware--phone-first-innovation-iqoo-alignment)
-10. [Hackathon Scoring Alignment](#10-hackathon-scoring-alignment)
-11. [Live 3-Minute Hackathon Demo Script](#11-live-3-minute-hackathon-demo-script)
-12. [Future Roadmap](#12-future-roadmap)
+## 1. Project Overview
+**Inheritance** is an AI-powered intergenerational oral history application designed to preserve, synthesize, and converse with ancestral family wisdom. It captures spoken audio recordings, selfie video reflections, vintage portraits, and heirloom recipes, converting them into a **searchable oral knowledge base and an interactive voice-cloned memoir**.
+
+Descendants do not just read static text—they can **listen to stories synthesized in their grandparents' authentic cloned voice** and **ask open-ended questions directly to the family archive**, receiving grounded answers with exact audio citations across **Kannada (ಕನ್ನಡ), Hindi (हिन्दी), Tamil (தமிழ்), and English**.
 
 ---
 
-## 1. EXECUTIVE SUMMARY
+## 2. Problem We Solve
+1. **Loss of Oral Lineage & Heritage**: Within 2 to 3 generations, over 90% of family struggles, cultural folklore, heirloom recipes, and life advice are permanently lost.
+2. **Static Photos & Text Lack Soul**: Traditional photo galleries and WhatsApp chats treat family memories as unindexed flat files without emotional vocal timbre or context.
+3. **The Vernacular Language Barrier**: Indian elders predominantly speak in regional vernaculars (**Kannada, Hindi, Tamil**). Most existing genealogy tools are English-only and fail to capture regional accents.
+4. **Senior-Friendly Capture**: Elders struggle with complex apps. Inheritance offers a 1-tap phone recording studio with live prompts and visual feedback.
 
-> *"Every time an elder passes away, a whole library burns to the ground."*
+---
 
-**Inheritance** is an AI-powered intergenerational oral history studio designed to capture, preserve, synthesize, and converse with ancestral family wisdom. It converts unindexed voice recordings, vintage physical photographs, and handwritten heirloom recipes into a **living, searchable oral knowledge base and an interactive voice-cloned memoir**.
+## 3. What We Do Differently (Competitive Advantage)
 
-Unlike traditional photo albums or generic cloud storage, Inheritance brings memories to life: grandchildren don’t just read about their ancestors—they can **listen to stories synthesized in their grandparents' authentic cloned voice** and **ask open-ended questions directly to the family archive**, receiving grounded answers with exact audio citations across **Kannada, Hindi, Tamil, and English**.
+| Capability | StoryWorth | MyHeritage | HereAfter AI | **INHERITANCE (Our App)** |
+| :--- | :--- | :--- | :--- | :--- |
+| **Primary Medium** | Printed Text Only | DNA / Static Trees | English Audio | **Multilingual Audio + Video + Interactive Tree** |
+| **Regional Languages** | ❌ None | ❌ None | ❌ None | ✅ **Kannada, Hindi, Tamil, English** |
+| **Voice Cloning** | ❌ No | ❌ Video Deepfake | ❌ Rigid / Complex | ✅ **Instant Multilingual Voice Clone** |
+| **Conversational Search (RAG)** | ❌ No | ❌ No | ⚠️ Rigid Canned Trees | ✅ **Grounded Semantic Q&A with Audio Citations** |
+| **Clickable Audio Citations** | ❌ No | ❌ No | ❌ No | ✅ **Streams exact source recording snippet** |
+| **Data Ownership** | ❌ Proprietary Lock-in | ❌ Proprietary Lock-in | ❌ Cloud Only | ✅ **On-Device Local Vault + Personal Google Drive** |
+| **Form Factor** | ❌ Web / Email | ❌ Desktop / Web | ⚠️ English Mobile | ✅ **Phone-First Native Android (Capacitor) + PWA** |
+
+---
+
+## 4. Local (On-Device) vs. Cloud Processing Breakdown
+
+To ensure high speed, battery efficiency, and zero cloud lock-in, the system splits workloads between native on-device processing and cloud AI inference:
+
+### A. What Runs 100% Locally (On-Device):
+1. **Web Audio Signal Extraction & Downsampling**:
+   - Uses native `AudioContext` and `OfflineAudioContext` directly on the device to extract pure audio tracks from video and audio streams.
+   - Resamples audio on-the-fly into clean 16kHz mono WAV PCM buffers, reducing upload payload sizes by ~85%.
+2. **Real-Time 64-Band FFT Audio Visualizer**:
+   - Computes Fast Fourier Transform frequency bins in real time via `AnalyserNode` at 60 FPS directly on the phone's GPU canvas during recording.
+3. **Encrypted Local Storage Vault**:
+   - All audio clips, video blobs, vintage portraits, and JSON transcripts are stored locally inside **IndexedDB** (`idb-keyval`) and LocalStorage for 100% offline access.
+4. **Kinship Graph & Lineage Engine**:
+   - Generational depth calculation, parent-child-sibling relational mapping, and branch filtering are computed locally in pure TypeScript.
+5. **Offline Keyword Search & Theme Classifier**:
+   - Rule-based heuristic classifier automatically tags memories into categories (*Childhood, Family, Career, Values, Recipes*) across all supported languages offline.
+
+### B. What Runs in the Cloud (API Invocations):
+1. **Multimodal Speech-to-Text Transcription**:
+   - Google Gemini 3.6 / 3.5 Flash & OpenRouter `google/gemini-2.5-flash` for high-precision vernacular transcription.
+2. **Grounded RAG Ancestor Q&A ("Ask")**:
+   - OpenRouter (`minimax/minimax-m3` & `deepseek/deepseek-v4-pro`) / Gemini Flash. Strictly grounded on stored transcripts with zero hallucination.
+3. **Instant Multilingual Voice Cloning**:
+   - ElevenLabs `eleven_multilingual_v2` for cross-lingual speech synthesis retaining the elder's authentic vocal timbre.
+4. **Decentralized Cloud Backup**:
+   - Google Drive API v3 (OAuth 2.0) allowing users to backup and restore their archive to their personal Google Drive.
+
+> **Note on Local LLMs**: Heavy neural LLM weights (e.g. 7B/8B GGUF) are deliberately **not** executed on-device to prevent extreme battery drain, RAM crashes, and thermal throttling on mobile devices.
+
+---
+
+## 5. Technology Stack
+
+| Layer | Technologies Used |
+| :--- | :--- |
+| **Mobile Runtime** | Android Native (API 26+), Capacitor 6, Java 17, Gradle 8.14 |
+| **Frontend Framework** | React 18, Vite 6, TypeScript 5 |
+| **Styling & UI** | Custom Vanilla CSS, Tailwind CSS, Lucide Icons, Canvas API |
+| **Audio Processing** | Web Audio API, `AudioContext`, `OfflineAudioContext`, `MediaRecorder` |
+| **Local Storage** | IndexedDB (`idb-keyval`), LocalStorage, OPFS |
+| **AI Transcription** | Google Gemini 3.6/3.5/3.7 Flash, OpenRouter Multimodal Flash |
+| **Conversational RAG** | OpenRouter (`minimax/minimax-m3`, `deepseek/deepseek-v4-pro`), Gemini Flash |
+| **Voice Cloning & TTS** | ElevenLabs Multilingual v2 (`eleven_multilingual_v2`) |
+| **Cloud Backup** | Google Drive API v3, Google OAuth 2.0 (`@codetrix-studio/capacitor-google-auth`) |
+
+---
+
+## 6. Core Application Modules & Functions
+
+### 1. Recording Studio (`src/components/CaptureBooth.tsx`)
+- **`startRecording(type: 'audio' | 'video')`**: Captures native mic and camera stream, renders live 64-band canvas waveform, and streams to `MediaRecorder`.
+- **`stopRecording()`**: Finalizes recording blob and triggers automatic client-side audio extraction and Gemini transcription.
+- **`handleAiTranscribe(blob)`**: Converts speech in video/audio into verbatim text across Kannada, Hindi, Tamil, or English.
+- **`saveStory()`**: Persists entry with title, theme, audio/video blob, and transcript into IndexedDB.
+
+### 2. Voice Memorial & Tribute Studio (`src/components/VoiceMemorialStudio.tsx`)
+- **`startLiveRecording()` / `handleAudioUpload()`**: Captures 5–30s reference voice sample of the elder.
+- **`handleGenerateNarrative()`**: Generates a heartfelt, first-person oral monologue via Gemini/OpenRouter in the selected regional language.
+- **`synthesizeNeuralVoice()`**: Calls ElevenLabs voice cloning API to create a custom voice model and synthesizes speech in the elder's cloned voice.
+- **`handleTogglePlay()`**: Plays back cloned audio at natural 1.0x human cadence with synchronized word highlighting.
+
+### 3. Ask the Archive — Grounded RAG (`src/components/AskArchive.tsx`)
+- **`handleSubmit()`**: Sends user query along with all stored family transcripts to the RAG engine.
+- **`directAskArchive()` ([`src/services/aiDirectService.ts`](file:///c:/Users/Dhruv/Downloads/inheritance%20%281%29/src/services/aiDirectService.ts))**: Queries OpenRouter / Gemini with strict zero-hallucination prompts.
+- **`renderCitationPills()`**: Renders clickable audio chips linking directly to the specific recording that proves the answer.
+
+### 4. Living Family Tree (`src/components/FamilyView.tsx`)
+- **`buildKinshipTree()`**: Traverses stored family members into hierarchical generational layers (Grandparents $\rightarrow$ Parents $\rightarrow$ Children).
+- **`MemberCard()`**: Displays member portrait, relation tag, and count of preserved stories with quick playback.
+
+### 5. Heirloom Memoir Book (`src/components/HeirloomBook.tsx`)
+- **`organizeChapters()`**: Automatically clusters recorded transcripts into thematic memoir chapters (*Childhood, Values, Career, Recipes*).
+- **`SoundscapeController`**: Plays ambient warm crackle audio while reading the editorial digital book.
+
+### 6. Personal Cloud Vault Sync (`src/components/GoogleDriveBackup.tsx`)
+- **`signInWithGoogle()`**: Authenticates user via Google OAuth 2.0.
+- **`syncAllEntriesToDrive()` ([`src/services/googleDriveService.ts`](file:///c:/Users/Dhruv/Downloads/inheritance%20%281%29/src/services/googleDriveService.ts))**: Exports all audio blobs, images, and JSON metadata into a user-owned Google Drive folder (`Living Family Archive`).
+
+---
+
+## 7. Project File Structure
 
 ```
-  ┌────────────────────────────────────────────────────────────────────────┐
-  │                           THE CORE PROMISE                             │
-  │                                                                        │
-  │   [Fragmented Voice & Photos]  ──▶  [AI Multimodal & Voice Engine]     │
-  │                                                   │                    │
-  │                                                   ▼                    │
-  │   [Living Ancestral Archive]   ◀──  [Multilingual Interactive Memoir]  │
-  └────────────────────────────────────────────────────────────────────────┘
+inheritance/
+├── android/                        # Capacitor Android native project & Gradle build scripts
+├── public/                         # PWA manifest, service worker, app icons & branding assets
+├── src/
+│   ├── components/
+│   │   ├── CaptureBooth.tsx        # Video & audio story recording studio with live FFT wave
+│   │   ├── VoiceMemorialStudio.tsx # Instant voice cloning & multilingual monologue studio
+│   │   ├── AskArchive.tsx          # Conversational grounded RAG search with audio citations
+│   │   ├── FamilyView.tsx          # Interactive kinship tree & family member explorer
+│   │   ├── HeirloomBook.tsx        # Auto-chaptered editorial memoir book with soundscapes
+│   │   ├── GoogleDriveBackup.tsx   # Google Drive backup and vault synchronization
+│   │   ├── MediaPlayer.tsx         # Universal audio/video player with waveform visualizer
+│   │   └── LanguageSelector.tsx    # Dynamic language switcher (Kannada, Hindi, Tamil, English)
+│   ├── services/
+│   │   ├── aiDirectService.ts      # Direct API engine (Gemini, OpenRouter, ElevenLabs)
+│   │   └── googleDriveService.ts   # Google Drive REST API v3 backup and restore engine
+│   ├── storage/
+│   │   └── db.ts                   # IndexedDB storage layer and cache management
+│   ├── state/
+│   │   └── AppContext.tsx          # Global reactive state for stories, family, and auth
+│   ├── i18n/
+│   │   └── translations.ts         # Full UI localization dictionary for 4 languages
+│   ├── types.ts                    # Core TypeScript interfaces (StoryEntry, Member, QAMessage)
+│   └── main.tsx                    # React application bootstrap and routing
+├── PROJECT_DOCUMENTATION.md        # Comprehensive technical dossier
+└── package.json                    # Dependencies and scripts
 ```
-
----
-
-## 2. PROBLEM STATEMENT & CULTURAL URGENCY
-
-1. **Extinction of Oral Folklore & Lineage**: Within 2 to 3 generations, over 90% of family struggles, cultural folklore, recipes, and ancestral life lessons are forgotten due to the transition to nuclear families.
-2. **Static Media Lacks Soul**: Current solutions (Google Photos, WhatsApp family groups) treat family memories as flat files—thousands of photos without context, emotions, or the authentic cadence of the storyteller's voice.
-3. **The Vernacular Divide**: Elders in India predominantly speak in regional vernaculars (**ಕನ್ನಡ, हिन्दी, தமிழ்**). Most digital memoir tools are English-centric and fail at capturing nuances in regional accents.
-4. **Senior Usability Barrier**: Complex cloud applications are inaccessible to elderly storytellers, requiring a zero-friction, phone-first capture experience.
-
----
-
-## 3. COMPETITIVE ANALYSIS: WHAT OTHERS DO VS. WHAT WE DO DIFFERENTLY
-
-Most existing genealogy and family recording tools fall short in voice authenticity, language inclusivity, conversational search, and local privacy:
-
-```
-┌───────────────────────────┬──────────────┬──────────────┬──────────────┬─────────────────────────┐
-│ Feature / Capability      │ StoryWorth   │ MyHeritage   │ HereAfter AI │ INHERITANCE (Our App)   │
-├───────────────────────────┼──────────────┼──────────────┼──────────────┼─────────────────────────┤
-│ Primary Medium            │ Written Text │ DNA / Trees  │ English Voice│ Multilingual Voice+Tree │
-│ Regional Indian Languages │ ❌ No        │ ❌ No        │ ❌ No        │ ✅ Kannada, Hindi,      │
-│ (Kannada, Hindi, Tamil)   │              │              │              │    Tamil, English       │
-│ Zero-Shot Voice Cloning   │ ❌ No        │ ❌ Deepfake  │ ❌ Heavy Rec │ ✅ 30s Voice Clone      │
-│ Conversational RAG Q&A    │ ❌ No        │ ❌ No        │ ⚠️ Rigid Qs  │ ✅ Grounded Semantic    │
-│ Audio Source Citations    │ ❌ No        │ ❌ No        │ ❌ No        │ ✅ Clickable Audio Pills│
-│ Interactive Lineage Tree  │ ❌ No        │ ✅ Static    │ ❌ No        │ ✅ Interactive Audio    │
-│ On-Device Local Vault     │ ❌ Cloud Lock│ ❌ Cloud Lock│ ❌ Cloud Lock│ ✅ Local IndexedDB +    │
-│                           │              │              │              │    Personal Google Drive│
-│ Senior-First Mobile UX    │ ❌ Email/Web │ ❌ Complex UI│ ⚠️ English UI│ ✅ 1-Tap Phone Record   │
-└───────────────────────────┴──────────────┴──────────────┴──────────────┴─────────────────────────┘
-```
-
-### Key Differentiators & Moats:
-1. **Zero-Shot Regional Indian Voice Cloning**:
-   - *Competitors*: Either do not support audio or only offer English synthesis requiring hours of studio training.
-   - *Inheritance*: Clones authentic timbre, cadence, and warmth from a single 30-second audio clip and synthesizes speech natively in **ಕನ್ನಡ, हिन्दी, தமிழ், and English**.
-2. **True Grounded "Ask the Archive" (Ancestral RAG)**:
-   - *Competitors*: StoryWorth only prints a hardbound book; HereAfter AI relies on canned, pre-recorded prompt-answer trees.
-   - *Inheritance*: Performs open-domain semantic retrieval across all family memories. When answering *"Why did Ajja move to Bengaluru in 1968?"*, it responds conversationally and renders **clickable audio citation pills** that stream the exact original recording segment.
-3. **Decentralized Data Sovereignty (No Vendor Lock-In)**:
-   - *Competitors*: Hold family memories hostage behind recurring subscription paywalls.
-   - *Inheritance*: Operates on a **local-first encrypted architecture**. Users own all raw MP3s, portraits, and JSON transcripts in their personal storage with one-tap sync to **their own Google Drive**.
-4. **Multimodal Keepsake Architecture**:
-   - Combines oral voice history, vintage portrait frames, handwritten recipe extraction, structured memoir chapters, and ambient acoustic soundscapes into a single cohesive experience.
-
----
-
-## 4. THE SOLUTION: INHERITANCE
-
-Inheritance bridges the generational gap by combining **conversational AI, zero-shot voice cloning, and a local-first encrypted archive**:
-
-* **Capture**: Frictionless 1-tap audio capture with real-time waveform visualization and portrait attachment.
-* **Preserve**: Automatic speech recognition, punctuation correction, sentiment tagging, and structured thematic chapters.
-* **Resurrect**: Cross-lingual voice synthesis that speaks regional Indian languages using the storyteller's authentic acoustic signature.
-* **Interact**: Grounded Retrieval-Augmented Generation (RAG) allowing any family member to query the archive as if conversing with the storyteller.
-
----
-
-## 5. LOCAL & ON-DEVICE PROCESSING VS. CLOUD AI ARCHITECTURE
-
-To ensure high responsiveness, battery efficiency, and zero vendor lock-in, Inheritance adopts a **Hybrid Edge-Cloud Architecture**: heavy neural reasoning and voice cloning are routed to low-latency cloud models, while all audio signal processing, graph calculations, and privacy-sensitive storage execute 100% locally on the device.
-
-```
-┌───────────────────────────────────────────────────────────────────────────────────────┐
-│                        1. 100% ON-DEVICE / LOCAL PROCESSING                           │
-├───────────────────────────────────────────────────────────────────────────────────────┤
-│ • Real-Time Audio Extraction & Downsampling:                                          │
-│   Uses Web Audio API (AudioContext & OfflineAudioContext) on-device to decode video   │
-│   and audio streams into high-precision 16kHz mono WAV PCM buffers with 0 cloud lag.  │
-│                                                                                       │
-│ • Live 64-Band FFT Audio Visualizer:                                                  │
-│   Computes Fast Fourier Transform frequency bins in real-time via AnalyserNode at    │
-│   60 FPS on the device GPU canvas during recording.                                   │
-│                                                                                       │
-│ • Zero-Knowledge Local Encrypted Archive:                                             │
-│   All audio clips, video recordings, keepsake portraits, and story transcripts are    │
-│   persisted directly in on-device IndexedDB & LocalStorage for instant offline access.│
-│                                                                                       │
-│ • Kinship & Generative Lineage Graph:                                                 │
-│   Generational depth traversal, paternal/maternal branch filters, and relational maps │
-│   compute dynamically in pure TypeScript on the device without external graphing APIs.│
-│                                                                                       │
-│ • Local Multilingual Theme & Keyword Extraction:                                      │
-│   Rule-based heuristic classifier tags memories into Childhood, Family, Career,       │
-│   Values, and Recipes across Kannada, Hindi, Tamil, and English completely offline.   │
-├───────────────────────────────────────────────────────────────────────────────────────┤
-│                         2. CLOUD AI INFERENCE & GENERATION                            │
-├───────────────────────────────────────────────────────────────────────────────────────┤
-│ • Speech-to-Text Transcription: Google Gemini 3.6/3.5 Flash & OpenRouter Multimodal.  │
-│ • Grounded Ancestor Q&A (Ask): OpenRouter (Minimax M3 / DeepSeek V4) & Gemini Flash.  │
-│ • Zero-Shot Voice Cloning: ElevenLabs Multilingual v2 with Indic script auto-routing. │
-│ • Cloud Vault Sync: Google Drive API v3 (OAuth 2.0 user-owned backup).                │
-└───────────────────────────────────────────────────────────────────────────────────────┘
-```
-
-> **Why are heavy Neural LLMs (GGUF/ONNX) not executed locally on the phone?**  
-> Running multi-gigabyte local LLMs (e.g. 7B/8B GGUF weights) inside a mobile WebView causes intense thermal throttling, exhausts 4GB+ of mobile RAM, and drains battery life rapidly. Our hybrid model offloads heavy neural inference to microsecond cloud endpoints while keeping all user data, signal processing, and audio synthesis pipelines local on-device.
-
----
-
-## 6. CORE FEATURES & SYSTEM MODULES
-
-```
-                           ┌───────────────────────────────────┐
-                           │      INHERITANCE CORE SUITE       │
-                           └─────────────────┬─────────────────┘
-                                             │
-      ┌──────────────────┬───────────────────┼───────────────────┬──────────────────┐
-      ▼                  ▼                   ▼                   ▼                  ▼
-[Voice Memorial]   [Ask Archive RAG]  [Living Family Tree] [Heirloom Book]  [Cloud Vault Sync]
-• Timbre Cloning   • Semantic Search  • Interactive Nodes  • Auto Chapters  • Google Drive OAuth
-• Multilingual TTS • Audio Citations  • Generation Layers  • Keepsake Photo • Zero-Knowledge
-• Keepsake Frame   • Minimax M3/V4    • Kinship Filter     • Ambient Sound  • Local-First Data
-```
-
-### Module 1: Multilingual Voice Memorial Studio ([`VoiceMemorialStudio.tsx`](file:///c:/Users/Dhruv/Downloads/inheritance%20%281%29/src/components/VoiceMemorialStudio.tsx))
-* **Timbre & Acoustic Cadence Cloning**: Extracts voice embeddings from short (30–60s) audio recordings using ElevenLabs.
-* **Cross-Lingual Synthesis**: Generates oral narratives in Kannada, Hindi, Tamil, and English while retaining the original speaker's pitch, warmth, and emotion.
-* **Commemorative Keepsake Framing**: Associates captured portraits (`memorialPhotoUrl`) with voice profiles, displayed across all application views.
-
-### Module 2: "Ask the Archive" Grounded RAG ([`AskArchive.tsx`](file:///c:/Users/Dhruv/Downloads/inheritance%20%281%29/src/components/AskArchive.tsx))
-* **Grounded Conversational Search**: Family members can ask natural questions (e.g., *"How did grandmother start her small business in 1974?"*).
-* **Hallucination-Free Audio Citations**: Cites specific recorded memories with clickable interactive audio pills that immediately stream the exact original recording segment.
-* **Fast Inference**: Powered by OpenRouter's high-speed reasoning models with low latency.
-
-### Module 3: Heirloom Keepsake Memoir Book ([`HeirloomBook.tsx`](file:///c:/Users/Dhruv/Downloads/inheritance%20%281%29/src/components/HeirloomBook.tsx))
-* **Chapter Generation**: Automatically categorizes oral transcripts into rich biographical chapters (*Early Childhood, Love & Marriage, Heritage Recipes, Life Wisdom*).
-* **Warm Editorial Aesthetic**: Custom typography, antique paper gradients (`#FAF7F2` and `#8B4513`), vintage framing, and ambient audio soundscapes.
-
-### Module 4: Living Family Tree & Lineage Map ([`FamilyView.tsx`](file:///c:/Users/Dhruv/Downloads/inheritance%20%281%29/src/components/FamilyView.tsx))
-* **Node-Based Relationship Visualization**: Connects ancestors and living descendants with relationship tags (Grandparent, Parent, Sibling, Child).
-* **Milestone Playback**: Tapping any node opens the ancestor's voice bio, attached stories, and commemorative photographs.
-
-### Module 5: Google Drive Cloud Vault ([`GoogleDriveBackup.tsx`](file:///c:/Users/Dhruv/Downloads/inheritance%20%281%29/src/components/GoogleDriveBackup.tsx))
-* **Data Sovereignty**: All stories and audio recordings persist locally via IndexedDB and SQLite.
-* **One-Tap Family Sync**: Direct integration with Google Drive API v3 to sync a complete portable `Inheritance_Vault.json` package across devices with zero vendor lock-in.
-
----
-
-## 7. COMPREHENSIVE TECH STACK & FUNCTION DIRECTORY
-
-### System Technology Stack
-
-| Layer | Component | Details / Rationale |
-| :--- | :--- | :--- |
-| **Mobile Runtime** | Android Native (API 26+) | Built with Java 17, Gradle 8.14, packaged via Capacitor 6 |
-| **Frontend Framework** | React 18 + Vite 6 | Fast bundle execution, ultra-low memory footprint |
-| **Language** | TypeScript 5 | End-to-end type safety across audio and AI payloads |
-| **Styling** | Custom Vanilla CSS + Tailwind | Glassmorphic cards, antique gold accents (`#E2A63B`), espresso tones (`#200E05`) |
-| **Audio Engine** | Web Audio API / MediaRecorder | Native microphone capture, FFT spectrum analysis, ambient crackle layering |
-| **Multimodal LLM** | Google Gemini 3.5 / 3.6 Flash | Zero-latency audio transcription and story extraction |
-| **RAG & Search** | OpenRouter (Minimax M3 / V4) | Grounded ancestor question-answering with strict source verification |
-| **Voice Cloning** | ElevenLabs `eleven_multilingual_v2` | Zero-shot multilingual voice cloning with Indic script autodetection |
-| **Cloud Backup** | Google Drive API v3 (OAuth 2.0) | User-owned decentralized cloud vault |
-| **Branding / Icons** | Native GDI+ C# Pipeline | Custom high-DPI Android mipmaps and adaptive launcher icons |
-
-### Key Functions & Code Architecture
-
-| File / Component | Primary Functions & Hooks | Description |
-| :--- | :--- | :--- |
-| [`src/services/aiDirectService.ts`](file:///c:/Users/Dhruv/Downloads/inheritance%20%281%29/src/services/aiDirectService.ts) | `generateVoiceMemorialDirect()`, `askArchiveDirect()`, `transcribeAudioDirect()` | Central AI orchestration for Gemini Multimodal, OpenRouter RAG, and ElevenLabs regional voice synthesis. |
-| [`src/components/VoiceMemorialStudio.tsx`](file:///c:/Users/Dhruv/Downloads/inheritance%20%281%29/src/components/VoiceMemorialStudio.tsx) | `handleStartRecording()`, `handleStopRecording()`, `handleSynthesize()`, `handleSaveToArchive()` | 3-step voice cloning workflow: live audio capture, voice embedding extraction, and multilingual audio synthesis. |
-| [`src/components/AskArchive.tsx`](file:///c:/Users/Dhruv/Downloads/inheritance%20%281%29/src/components/AskArchive.tsx) | `handleAsk()`, `playStoryAudio()`, `renderCitationPills()` | Semantic search interface that parses user queries against story memories and streams grounded citations. |
-| [`src/components/FamilyView.tsx`](file:///c:/Users/Dhruv/Downloads/inheritance%20%281%29/src/components/FamilyView.tsx) | `EntryCard()`, `filterEntriesByMember()`, `handleExpandStory()` | Renders living story cards with commemorative portrait avatars, voice player, and transcript badges. |
-| [`src/components/HeirloomBook.tsx`](file:///c:/Users/Dhruv/Downloads/inheritance%20%281%29/src/components/HeirloomBook.tsx) | `organizeChapters()`, `renderStoryKeepsake()`, `toggleSoundscape()` | Editorial book reader with structured biographical chapters and vintage keepsake portrait frames. |
-| [`src/components/GoogleDriveBackup.tsx`](file:///c:/Users/Dhruv/Downloads/inheritance%20%281%29/src/components/GoogleDriveBackup.tsx) | `handleConnectDrive()`, `handleBackupVault()`, `handleRestoreVault()` | OAuth 2.0 Google Drive bridge for exporting and restoring the entire `Inheritance_Vault.json`. |
-| [`src/state/AppContext.tsx`](file:///c:/Users/Dhruv/Downloads/inheritance%20%281%29/src/state/AppContext.tsx) | `useApp()`, `addStoryEntry()`, `updateFamilyMembers()`, `setCurrentLanguage()` | Global reactive state container managing story entries, family tree nodes, and active user session. |
-
----
-
-## 8. AI INFERENCE, REGIONAL VOICE STRATEGY & RAG PIPELINE
-
-```
-┌───────────────────────────────────────────────────────────────────────────────────────┐
-│                             MULTIMODAL AI & RAG PIPELINE                              │
-├───────────────────────────────────────────────────────────────────────────────────────┤
-│ 1. Raw Audio Stream ──▶ Google Gemini 3.5/3.6 Flash                                   │
-│    • Low-latency audio transcription into clean verbatim text.                        │
-│    • Automatic extraction of Story Title, Thematic Chapter, and Emotional Tone.       │
-│                                                                                       │
-│ 2. Audio Sample ──▶ ElevenLabs Voice Cloning Engine                                   │
-│    • Extracts 128-dimensional acoustic timbre & pitch embeddings.                     │
-│    • Generates a persistent Instant Voice Model ID.                                   │
-│                                                                                       │
-│ 3. Vernacular Speech Synthesis ──▶ `eleven_multilingual_v2`                           │
-│    • Omission of restrictive ASCII language flags for native Indic script detection.  │
-│    • High-fidelity synthesis in Kannada (ಕನ್ನಡ), Hindi (हिन्दी), Tamil (தமிழ்), English.│
-│                                                                                       │
-│ 4. Grounded RAG Query ──▶ OpenRouter (Minimax M3 / DeepSeek V4)                       │
-│    • Injects all family memory transcripts into system context prompt.                │
-│    • Enforces strict grounding rules: answers only using cited story IDs.             │
-│    • Returns structured JSON with `answer` and `groundedStoryIds` array.              │
-└───────────────────────────────────────────────────────────────────────────────────────┘
-```
-
----
-
-## 9. HARDWARE & PHONE-FIRST INNOVATION (iQOO ALIGNMENT)
-
-Inheritance was engineered from the ground up as a **phone-first application** optimized for the iQOO platform:
-
-1. **Hardware-Accelerated Audio**: Leverages multi-mic hardware arrays for crisp voice isolation during family storytelling sessions.
-2. **On-Device Local Intelligence**: Story indexing, transcript caching, and sentiment parsing run locally without requiring constant cloud round-trips.
-3. **Office Kit Hybrid Workflow**: During development, the iQOO phone served as the dedicated real-time test and capture surface, while the paired laptop managed continuous compilation and Gradle packaging.
-4. **Adaptive Display Hardware**: High-contrast, warm editorial interface styled specifically for high-refresh AMOLED screens, preserving battery life during extended storytelling sessions.
-
----
-
-## 10. HACKATHON SCORING ALIGNMENT
-
-| Judging Dimension | Weight | Project Delivery & Proof Points |
-| :--- | :---: | :--- |
-| **End Product Quality** | **30%** | Production-ready, fully functional Android APK with zero mock data. Responsive touch gestures, live audio playback, and rich visual feedback. |
-| **Novelty & Impact** | **20%** | Reimagines family heritage from passive photo storage into an active, conversational voice legacy. High emotional and cultural value for Indian households. |
-| **Creative Phone Use** | **15%** | Deep native hardware integration: microphone capture, camera portrait framing, FFT audio spectrum visualization, and custom Android launcher mipmaps. |
-| **Technical Depth** | **15%** | Multi-model AI pipeline bridging Gemini Multimodal, OpenRouter Grounded RAG, and ElevenLabs Multilingual Voice Cloning into a seamless mobile workflow. |
-| **Office Kit Usage** | **10%** | Real-time phone-first execution with seamless laptop synchronization for heavy build tasks and artifact management. |
-| **Demo & Presentation** | **10%** | High-emotion narrative arc demonstrating real-time voice cloning in Kannada/Hindi and live interactive ancestor interrogation. |
-
----
-
-## 11. LIVE 3-MINUTE HACKATHON DEMO SCRIPT
-
-### [0:00 – 0:45] The Emotional Hook
-* *"Judges, imagine if you could sit down today and have a conversation with your great-grandfather in his own voice, asking how he built your family home. Today, that wisdom is lost. Inheritance ensures it never happens again."*
-* *(Hold up the iQOO device running Inheritance).*
-
-### [0:45 – 1:45] Live Voice Cloning & Regional Synthesis
-1. Open **Tribute Studio**.
-2. Record a 20-second story of an elder and snap a quick portrait.
-3. Tap **Generate Voice Memorial** — the AI extracts timbre and constructs the voice profile.
-4. Tap **Kannada (ಕನ್ನಡ)** or **Hindi (हिन्दी)** and hit Play.
-5. **Impact**: The phone plays synthesized audio in the elder's exact cloned voice and accent.
-
-### [1:45 – 2:30] Grounded "Ask the Archive" (RAG)
-1. Navigate to **Ask the Archive**.
-2. Speak a prompt: *"What was grandfather's advice about handling difficult times?"*
-3. The AI answers in real-time, displaying a **Grounded Audio Citation Pill**.
-4. Tap the pill to play the raw historical clip recorded by the grandfather.
-
-### [2:30 – 3:00] Keepsake Book & Conclusion
-1. Show the **Heirloom Memoir Book** with formatted chapters and vintage portraits.
-2. Demonstrate **Google Drive 1-Tap Backup**.
-3. **Closing**: *"Inheritance turns ephemeral family memories into living, permanent heirlooms. Built phone-first for iQOO City Battles 2026. Thank you!"*
-
----
-
-## 12. FUTURE ROADMAP
-
-1. **Snapdragon NPU On-Device Voice Synthesis**: Running quantized local TTS models directly on the mobile NPU for 100% offline voice cloning.
-2. **Generative Archival Video (Lip-Syncing Portraits)**: Animating vintage static portraits to match synthesized speech.
-3. **NFC / QR Heirloom Audio Postcards**: Physical printable cards embedded with NFC chips that stream the ancestor's voice when scanned with any smartphone.
-
----
-*Created for the iQOO City Battles Hackathon 2026 · Bengaluru, India*
